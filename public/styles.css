@@ -297,6 +297,25 @@ body {
 .spread-positive { color: #ef4444; font-weight: 600; }
 .spread-negative { color: var(--green); font-weight: 600; }
 
+/* Soberanos Table */
+.soberanos-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--border); border-radius: 10px; }
+.soberanos-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; white-space: nowrap; table-layout: fixed; }
+.soberanos-table thead { background: var(--accent); color: #fff; }
+.soberanos-table th { padding: 10px 14px; font-weight: 600; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; text-align: right; }
+.soberanos-table th:first-child { text-align: left; }
+.soberanos-table td { padding: 9px 14px; border-bottom: 1px solid var(--border-light); text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+.soberanos-table td:first-child { text-align: left; }
+.soberanos-table tbody tr { background: var(--card-bg); }
+.soberanos-table tbody tr:hover { background: var(--bg-subtle); }
+.soberanos-table tbody tr:last-child td { border-bottom: none; }
+.soberano-ticker { font-weight: 700; color: var(--accent); margin-right: 6px; }
+.soberano-ley { font-size: 0.6rem; padding: 2px 6px; border-radius: 4px; font-weight: 600; vertical-align: middle; }
+.soberano-ley.ley-local { background: #fef3c7; color: #92400e; }
+.soberano-ley.ley-ny { background: #dbeafe; color: #1e40af; }
+[data-theme="dark"] .soberano-ley.ley-local { background: #422006; color: #fbbf24; }
+[data-theme="dark"] .soberano-ley.ley-ny { background: #1e3a5f; color: #93bbfd; }
+.soberano-ytm { font-weight: 700; color: var(--green); }
+
 .admin-link {
   font-size: 0.72rem;
   color: var(--text-tertiary);
@@ -826,5 +845,15 @@ body {
   .cedear-table td:nth-child(2) { display: none; }
   .cedear-table td:nth-child(4) { display: none; }
   .cedear-table td:nth-child(7) { display: none; }
+  /* Soberanos table mobile */
+  .soberanos-table { table-layout: auto; font-size: 0.68rem; }
+  .soberanos-table th { padding: 8px 8px; font-size: 0.6rem; }
+  .soberanos-table td { padding: 7px 8px; }
+  .soberanos-table .col-ley { display: none; }
+  .soberanos-table .col-duration { display: none; }
+  .soberanos-table .col-vto { display: none; }
+  .soberanos-table td:nth-child(2) { display: none; }
+  .soberanos-table td:nth-child(5) { display: none; }
+  .soberanos-table td:nth-child(6) { display: none; }
   .footer { padding: 24px 16px 40px; }
 }

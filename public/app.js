@@ -312,6 +312,7 @@ function setupTabs() {
       document.getElementById('tab-plazofijo').style.display = target === 'plazofijo' ? '' : 'none';
       document.getElementById('tab-lecaps').style.display = target === 'lecaps' ? '' : 'none';
       document.getElementById('tab-cedears').style.display = 'none';
+      document.getElementById('tab-soberanos').style.display = 'none';
 
       const hero = document.getElementById('hero');
       if (target === 'plazofijo') {
@@ -339,11 +340,21 @@ function setupTabs() {
   const subnav = document.querySelector('.subnav');
   const hero = document.getElementById('hero');
 
-  function switchToArs() {
-    headerArs.classList.add('active');
-    headerCedears.classList.remove('active');
-    subnav.style.display = '';
+  const headerSoberanos = document.getElementById('header-soberanos');
+
+  function hideAllTabs() {
+    document.getElementById('tab-billeteras').style.display = 'none';
+    document.getElementById('tab-plazofijo').style.display = 'none';
+    document.getElementById('tab-lecaps').style.display = 'none';
     document.getElementById('tab-cedears').style.display = 'none';
+    document.getElementById('tab-soberanos').style.display = 'none';
+    [headerArs, headerCedears, headerSoberanos].forEach(b => b && b.classList.remove('active'));
+  }
+
+  function switchToArs() {
+    hideAllTabs();
+    headerArs.classList.add('active');
+    subnav.style.display = '';
     // Show whichever ARS tab was active
     const activeTab = document.querySelector('.subnav-tab.active');
     if (activeTab) {
@@ -371,12 +382,9 @@ function setupTabs() {
   }
 
   function switchToCedears() {
+    hideAllTabs();
     headerCedears.classList.add('active');
-    headerArs.classList.remove('active');
     subnav.style.display = 'none';
-    document.getElementById('tab-billeteras').style.display = 'none';
-    document.getElementById('tab-plazofijo').style.display = 'none';
-    document.getElementById('tab-lecaps').style.display = 'none';
     document.getElementById('tab-cedears').style.display = '';
     hero.querySelector('h1').textContent = 'Arbitraje de CEDEARs';
     hero.querySelector('p').textContent = 'CCL implícito por CEDEAR y spread vs tipo de cambio de referencia.';
@@ -385,8 +393,21 @@ function setupTabs() {
     }
   }
 
+  function switchToSoberanos() {
+    hideAllTabs();
+    headerSoberanos.classList.add('active');
+    subnav.style.display = 'none';
+    document.getElementById('tab-soberanos').style.display = '';
+    hero.querySelector('h1').textContent = 'Bonos Soberanos USD';
+    hero.querySelector('p').textContent = 'Rendimiento de bonos soberanos argentinos en dólares. Ley local y ley extranjera.';
+    if (!document.getElementById('soberanos-list').hasChildNodes()) {
+      loadSoberanos();
+    }
+  }
+
   if (headerArs) headerArs.addEventListener('click', (e) => { e.preventDefault(); switchToArs(); });
   if (headerCedears) headerCedears.addEventListener('click', (e) => { e.preventDefault(); switchToCedears(); });
+  if (headerSoberanos) headerSoberanos.addEventListener('click', (e) => { e.preventDefault(); switchToSoberanos(); });
 }
 
 // ─── Plazo Fijo section ───
@@ -894,4 +915,274 @@ function formatVolume(v) {
   if (v >= 1e6) return '$' + (v / 1e6).toFixed(0) + 'M';
   if (v >= 1e3) return '$' + (v / 1e3).toFixed(0) + 'K';
   return '$' + v.toString();
+}
+
+// ─── Soberanos USD section ───
+
+async function loadSoberanos() {
+  const container = document.getElementById('soberanos-list');
+  container.innerHTML = `<div class="loading"><div class="loading-spinner"></div><p>Cargando bonos soberanos...</p></div>`;
+
+  try {
+    const [config, apiRes] = await Promise.all([
+      fetch('/api/config').then(r => r.json()),
+      fetch('/api/soberanos').then(r => r.ok ? r.json() : { data: [] }).catch(() => ({ data: [] }))
+    ]);
+
+    const soberanos = config.soberanos || {};
+    const bondPrices = apiRes.data || [];
+    const ccl = apiRes.ccl || 0;
+
+    if (!bondPrices.length) {
+      container.innerHTML = '<div class="loading">No se pudieron cargar los datos de bonos soberanos.</div>';
+      return;
+    }
+
+    const today = new Date();
+    const items = [];
+
+    for (const bp of bondPrices) {
+      const bondConfig = soberanos[bp.symbol];
+      if (!bondConfig || !bondConfig.flujos) continue;
+
+      const priceUsd = bp.price_usd;
+      if (priceUsd <= 0) continue;
+
+      // Filter future flows only
+      const futureFlows = bondConfig.flujos
+        .map(f => ({ fecha: parseLocalDate(f.fecha), monto: f.monto }))
+        .filter(f => f.fecha > today);
+
+      if (futureFlows.length === 0) continue;
+
+      // Calculate YTM
+      const ytm = calcYTM(priceUsd, futureFlows, today);
+
+      // Calculate modified duration
+      const duration = calcDuration(priceUsd, futureFlows, today, ytm);
+
+      // Years to maturity
+      const lastFlow = futureFlows[futureFlows.length - 1].fecha;
+      const yearsToMaturity = (lastFlow - today) / (365.25 * 24 * 60 * 60 * 1000);
+
+      items.push({
+        symbol: bp.symbol,
+        ley: bondConfig.ley,
+        par: bondConfig.par,
+        priceUsd,
+        ytm,
+        duration,
+        yearsToMaturity,
+        vencimiento: bondConfig.vencimiento,
+        volume: bp.volume,
+      });
+    }
+
+    // Sort by years to maturity
+    items.sort((a, b) => a.yearsToMaturity - b.yearsToMaturity);
+
+    renderSoberanosTable(container, items, ccl);
+
+    // Render yield curve
+    renderYieldCurve(items);
+
+    const source = document.getElementById('soberanos-source');
+    if (source) {
+      source.textContent = `Fuente: data912 (en vivo) — CCL: $${ccl.toFixed(0)} — ${items.length} bonos`;
+    }
+  } catch (e) {
+    console.error('Error loading soberanos:', e);
+    container.innerHTML = '<div class="loading">Error al cargar datos de bonos soberanos.</div>';
+  }
+}
+
+// Newton-Raphson YTM calculation for bonds with multiple cash flows
+function calcYTM(price, flows, settlementDate) {
+  const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000;
+  let r = 0.10; // initial guess 10%
+
+  for (let iter = 0; iter < 100; iter++) {
+    let pv = 0;
+    let dpv = 0;
+    for (const f of flows) {
+      const t = (f.fecha - settlementDate) / MS_PER_YEAR;
+      if (t <= 0) continue;
+      const disc = Math.pow(1 + r, t);
+      pv += f.monto / disc;
+      dpv -= t * f.monto / (disc * (1 + r));
+    }
+    const diff = pv - price;
+    if (Math.abs(diff) < 0.0001) break;
+    if (Math.abs(dpv) < 1e-12) break;
+    r -= diff / dpv;
+    if (r < -0.5) r = -0.5;
+    if (r > 2) r = 2;
+  }
+  return r * 100; // return as percentage
+}
+
+// Macaulay duration
+function calcDuration(price, flows, settlementDate, ytmPct) {
+  const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000;
+  const r = ytmPct / 100;
+  let weightedTime = 0;
+  let totalPV = 0;
+  for (const f of flows) {
+    const t = (f.fecha - settlementDate) / MS_PER_YEAR;
+    if (t <= 0) continue;
+    const pv = f.monto / Math.pow(1 + r, t);
+    weightedTime += t * pv;
+    totalPV += pv;
+  }
+  return totalPV > 0 ? weightedTime / totalPV : 0;
+}
+
+function renderSoberanosTable(container, items, ccl) {
+  const rows = items.map(item => {
+    const leyClass = item.ley === 'NY' ? 'ley-ny' : 'ley-local';
+    const leyLabel = item.ley === 'NY' ? 'NY' : 'Local';
+    // Find spread vs par bond
+    const par = items.find(i => i.symbol === item.par);
+    let spreadText = '-';
+    if (par) {
+      const spread = (item.ytm - par.ytm);
+      const sign = spread > 0 ? '+' : '';
+      spreadText = `${sign}${spread.toFixed(2)}pp`;
+    }
+    return `<tr>
+      <td><span class="soberano-ticker">${item.symbol}</span><span class="soberano-ley ${leyClass}">${leyLabel}</span></td>
+      <td class="col-ley">${leyLabel}</td>
+      <td>US$${item.priceUsd.toFixed(2)}</td>
+      <td class="soberano-ytm">${item.ytm.toFixed(2)}%</td>
+      <td class="col-duration">${item.duration.toFixed(1)}</td>
+      <td class="col-vto">${item.vencimiento}</td>
+      <td>${spreadText}</td>
+    </tr>`;
+  }).join('');
+
+  container.innerHTML = `
+    <div class="soberanos-table-wrap">
+      <table class="soberanos-table">
+        <thead>
+          <tr>
+            <th>Ticker</th>
+            <th class="col-ley">Ley</th>
+            <th>Precio</th>
+            <th>TIR</th>
+            <th class="col-duration">Duration</th>
+            <th class="col-vto">Vencimiento</th>
+            <th>Spread</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <p style="font-size:0.7rem;color:var(--text-tertiary);margin-top:6px">
+      Spread = diferencia de TIR entre ley NY y ley local del mismo bono. TIR calculada con flujos de fondos futuros.
+    </p>`;
+}
+
+let soberanosChart = null;
+function renderYieldCurve(items) {
+  const canvas = document.getElementById('soberanos-scatter');
+  if (!canvas) return;
+  if (soberanosChart) soberanosChart.destroy();
+
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)';
+  const textColor = isDark ? '#a0a0a8' : '#71717a';
+
+  const localBonds = items.filter(i => i.ley === 'local');
+  const nyBonds = items.filter(i => i.ley === 'NY');
+
+  // Fit curves
+  const localPoints = localBonds.map(i => [i.yearsToMaturity, i.ytm]);
+  const nyPoints = nyBonds.map(i => [i.yearsToMaturity, i.ytm]);
+  const localCurve = localPoints.length >= 3 ? fitPolyCurve(localPoints, 2, 50) : [];
+  const nyCurve = nyPoints.length >= 3 ? fitPolyCurve(nyPoints, 2, 50) : [];
+
+  const datasets = [];
+
+  if (localCurve.length) {
+    datasets.push({
+      label: 'Ley Local (curva)',
+      data: localCurve,
+      type: 'line',
+      borderColor: '#f97316',
+      borderWidth: 2,
+      borderDash: [6, 3],
+      pointRadius: 0,
+      tension: 0.4,
+      order: 2,
+    });
+  }
+  if (nyCurve.length) {
+    datasets.push({
+      label: 'Ley NY (curva)',
+      data: nyCurve,
+      type: 'line',
+      borderColor: '#3b82f6',
+      borderWidth: 2,
+      borderDash: [6, 3],
+      pointRadius: 0,
+      tension: 0.4,
+      order: 2,
+    });
+  }
+
+  datasets.push({
+    label: 'Ley Local',
+    data: localBonds.map(i => ({ x: i.yearsToMaturity, y: i.ytm, label: i.symbol })),
+    backgroundColor: '#f97316',
+    borderColor: '#ea580c',
+    borderWidth: 1.5,
+    pointRadius: 7,
+    pointHoverRadius: 9,
+    type: 'scatter',
+    order: 1,
+  });
+
+  datasets.push({
+    label: 'Ley NY',
+    data: nyBonds.map(i => ({ x: i.yearsToMaturity, y: i.ytm, label: i.symbol })),
+    backgroundColor: '#3b82f6',
+    borderColor: '#2563eb',
+    borderWidth: 1.5,
+    pointRadius: 7,
+    pointHoverRadius: 9,
+    type: 'scatter',
+    order: 1,
+  });
+
+  soberanosChart = new Chart(canvas, {
+    type: 'scatter',
+    data: { datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: textColor, filter: (item) => !item.text.includes('curva') } },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const d = ctx.raw;
+              return `${d.label || ''}: TIR ${d.y?.toFixed(2) || ctx.parsed.y.toFixed(2)}%`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          title: { display: true, text: 'Años al vencimiento', color: textColor },
+          grid: { color: gridColor },
+          ticks: { color: textColor },
+        },
+        y: {
+          title: { display: true, text: 'TIR (%)', color: textColor },
+          grid: { color: gridColor },
+          ticks: { color: textColor, callback: v => v.toFixed(1) + '%' },
+        }
+      }
+    }
+  });
 }

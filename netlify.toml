@@ -18,6 +18,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/soberanos"
+  to = "/.netlify/functions/soberanos"
+  status = 200
+
+[[redirects]]
   from = "/api/cedears"
   to = "/.netlify/functions/cedears"
   status = 200

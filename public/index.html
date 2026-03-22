@@ -43,6 +43,9 @@
         <a href="#" class="currency-tab" id="header-cedears">
           <span class="flag">📊</span> CEDEARs
         </a>
+        <a href="#" class="currency-tab" id="header-soberanos">
+          <span class="flag">🏛️</span> Soberanos USD
+        </a>
       </nav>
       <a href="/comparar.html" class="admin-link" style="margin-right:6px">Comparar Fondos</a>
       <button class="theme-toggle" id="theme-toggle" aria-label="Cambiar tema">🌙</button>
@@ -128,10 +131,27 @@
       </section>
     </div>
 
+    <!-- Tab: Soberanos USD -->
+    <div id="tab-soberanos" style="display:none">
+      <section class="section" id="soberanos-section">
+        <h2>Bonos Soberanos USD</h2>
+        <p class="section-desc">Rendimiento (TIR) de bonos soberanos argentinos en dólares — Ley local y ley extranjera</p>
+        <div id="soberanos-list"></div>
+        <p class="section-source" id="soberanos-source"></p>
+      </section>
+      <section class="section" id="soberanos-chart-section">
+        <h2>Curva de rendimientos</h2>
+        <p class="section-desc">TIR vs años al vencimiento</p>
+        <div class="scatter-plot">
+          <canvas id="soberanos-scatter"></canvas>
+        </div>
+      </section>
+    </div>
+
   </main>
 
   <footer class="footer">
-    <p>FCIs: CAFCI via ArgentinaDatos. Plazos Fijos: BCRA via ArgentinaDatos. LECAPs/BONCAPs: data912. CEDEARs: data912 + Yahoo Finance.</p>
+    <p>FCIs: CAFCI via ArgentinaDatos. Plazos Fijos: BCRA via ArgentinaDatos. LECAPs/BONCAPs: data912. CEDEARs: data912 + Yahoo Finance. Soberanos: data912.</p>
     <p>Los rendimientos pasados no garantizan rendimientos futuros.</p>
   </footer>
 
