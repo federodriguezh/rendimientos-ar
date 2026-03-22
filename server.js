@@ -94,6 +94,46 @@ app.get('/api/cafci/ficha/:fondoId/:claseId', async (req, res) => {
   }
 });
 
+// --- LECAP/BONCAP Prices (BYMA proxy) ---
+
+app.get('/api/lecaps', async (req, res) => {
+  const https = require('https');
+  try {
+    const data = await new Promise((resolve, reject) => {
+      const body = '{}';
+      const options = {
+        hostname: 'open.bymadata.com.ar',
+        path: '/vanoms-be-core/rest/api/bymadata/free/lebacs',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+        rejectUnauthorized: false,
+      };
+      const r = https.request(options, (resp) => {
+        let d = '';
+        resp.on('data', chunk => d += chunk);
+        resp.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { reject(e); } });
+      });
+      r.on('error', reject);
+      r.write(body);
+      r.end();
+    });
+
+    const result = [];
+    for (const item of (data.data || [])) {
+      if (item.settlementType !== '2') continue;
+      const offer = parseFloat(item.offerPrice) || 0;
+      const close = parseFloat(item.closingPrice) || 0;
+      const price = offer > 0 ? offer : close;
+      if (price <= 0) continue;
+      result.push({ symbol: item.symbol, price, offer, bid: parseFloat(item.bidPrice) || 0, close, trade: parseFloat(item.trade) || 0, maturityDate: item.maturityDate, daysToMaturity: item.daysToMaturity });
+    }
+    res.json({ data: result });
+  } catch (err) {
+    console.error('BYMA proxy error:', err.message);
+    res.status(502).json({ error: 'Failed to fetch BYMA data' });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
 });

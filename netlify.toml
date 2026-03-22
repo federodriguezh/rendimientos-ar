@@ -13,6 +13,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/lecaps"
+  to = "/.netlify/functions/lecaps"
+  status = 200
+
+[[redirects]]
   from = "/api/config"
   to = "/config.json"
   status = 200

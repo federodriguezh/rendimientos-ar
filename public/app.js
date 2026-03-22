@@ -503,24 +503,38 @@ async function loadLecaps() {
   container.innerHTML = `<div class="loading"><div class="loading-spinner"></div><p>Cargando LECAPs...</p></div>`;
 
   try {
-    const config = await fetch('/api/config').then(r => r.json());
+    // Fetch config (fallback prices) and live BYMA data in parallel
+    const [config, bymaRes] = await Promise.all([
+      fetch('/api/config').then(r => r.json()),
+      fetch('/api/lecaps').then(r => r.ok ? r.json() : { data: [] }).catch(() => ({ data: [] }))
+    ]);
+
     const lecaps = config.lecaps;
     if (!lecaps || !lecaps.letras || !lecaps.letras.length) {
       container.innerHTML = '<div class="loading">No se pudieron cargar los datos de LECAPs.</div>';
       return;
     }
 
+    // Build live price lookup from BYMA
+    const livePrices = {};
+    for (const item of (bymaRes.data || [])) {
+      livePrices[item.symbol] = item.price;
+    }
+    const hasLive = Object.keys(livePrices).length > 0;
+
     // Settlement is T+1 business day
     const today = new Date();
     const settlement = getSettlementDate(today);
 
     const items = lecaps.letras.filter(l => l.activo).map(l => {
+      // Use live price if available, fallback to config
+      const precio = livePrices[l.ticker] || l.precio;
       const vto = parseLocalDate(l.fecha_vencimiento);
       const dias = Math.max(1, Math.round((vto - settlement) / (1000 * 60 * 60 * 24)));
-      const ganancia = l.pago_final / l.precio;
+      const ganancia = l.pago_final / precio;
       const tna = (ganancia - 1) * (365 / dias) * 100;
       const tir = (Math.pow(ganancia, 365 / dias) - 1) * 100;
-      return { ...l, dias, tna, tir };
+      return { ...l, precio, dias, tna, tir, live: !!livePrices[l.ticker] };
     });
 
     // Sort by days to maturity (ascending)
@@ -567,7 +581,14 @@ async function loadLecaps() {
 
     // Source note
     const source = document.getElementById('lecaps-source');
-    if (source) source.textContent = `Fuente: ${lecaps.fuente} — Actualizado: ${lecaps.actualizado}`;
+    const liveCount = items.filter(i => i.live).length;
+    if (source) {
+      if (hasLive) {
+        source.textContent = `Fuente: BYMA (en vivo) — ${liveCount} tickers en vivo, ${items.length - liveCount} con último precio conocido`;
+      } else {
+        source.textContent = `Fuente: ${lecaps.fuente} — Actualizado: ${lecaps.actualizado}`;
+      }
+    }
 
     // Render scatter plot (TIR vs Días)
     renderLecapScatter(items);
