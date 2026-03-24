@@ -329,6 +329,7 @@ function setupTabs() {
       document.getElementById('tab-plazofijo').style.display = target === 'plazofijo' ? '' : 'none';
       document.getElementById('tab-lecaps').style.display = target === 'lecaps' ? '' : 'none';
       document.getElementById('tab-cer').style.display = target === 'cer' ? '' : 'none';
+      document.getElementById('tab-ons').style.display = target === 'ons' ? '' : 'none';
       document.getElementById('tab-soberanos').style.display = 'none';
 
       const hero = document.getElementById('hero');
@@ -349,6 +350,12 @@ function setupTabs() {
         hero.querySelector('p').textContent = 'Rendimiento real de bonos ajustados por CER en pesos argentinos.';
         if (!document.getElementById('cer-list').hasChildNodes()) {
           loadCER();
+        }
+      } else if (target === 'ons') {
+        hero.querySelector('h1').textContent = 'Obligaciones Negociables';
+        hero.querySelector('p').textContent = 'Rendimiento de bonos corporativos en USD. Click en una ON para la calculadora.';
+        if (!document.getElementById('ons-list').hasChildNodes()) {
+          loadONs();
         }
       } else {
         hero.querySelector('h1').textContent = 'Rendimientos de Fondos y Billeteras';
@@ -373,6 +380,7 @@ function setupTabs() {
     document.getElementById('tab-plazofijo').style.display = 'none';
     document.getElementById('tab-lecaps').style.display = 'none';
     document.getElementById('tab-cer').style.display = 'none';
+    document.getElementById('tab-ons').style.display = 'none';
     document.getElementById('tab-soberanos').style.display = 'none';
     document.getElementById('section-mundo').style.display = 'none';
     [headerArs, headerSoberanos, headerMundo].forEach(b => b && b.classList.remove('active'));
@@ -402,11 +410,13 @@ function setupTabs() {
       document.getElementById('tab-plazofijo').style.display = target === 'plazofijo' ? '' : 'none';
       document.getElementById('tab-lecaps').style.display = target === 'lecaps' ? '' : 'none';
       document.getElementById('tab-cer').style.display = target === 'cer' ? '' : 'none';
+      document.getElementById('tab-ons').style.display = target === 'ons' ? '' : 'none';
     } else {
       document.getElementById('tab-billeteras').style.display = '';
       document.getElementById('tab-plazofijo').style.display = 'none';
       document.getElementById('tab-lecaps').style.display = 'none';
       document.getElementById('tab-cer').style.display = 'none';
+      document.getElementById('tab-ons').style.display = 'none';
     }
     // Restore hero
     const activeSubtab = document.querySelector('.subnav-tab.active');
@@ -464,6 +474,7 @@ function setupTabs() {
   else if (initialHash === 'plazofijo') { switchToArs(); document.querySelector('.subnav-tab[data-tab="plazofijo"]')?.click(); }
   else if (initialHash === 'lecaps') { switchToArs(); document.querySelector('.subnav-tab[data-tab="lecaps"]')?.click(); }
   else if (initialHash === 'cer') { switchToArs(); document.querySelector('.subnav-tab[data-tab="cer"]')?.click(); }
+  else if (initialHash === 'ons') { switchToArs(); document.querySelector('.subnav-tab[data-tab="ons"]')?.click(); }
 
   // Handle back/forward navigation (skip if subnav tab already active)
   let _hashChanging = false;
@@ -476,6 +487,7 @@ function setupTabs() {
     else if (h === 'plazofijo') { switchToArs(); document.querySelector('.subnav-tab[data-tab="plazofijo"]')?.click(); }
     else if (h === 'lecaps') { switchToArs(); document.querySelector('.subnav-tab[data-tab="lecaps"]')?.click(); }
     else if (h === 'cer') { switchToArs(); document.querySelector('.subnav-tab[data-tab="cer"]')?.click(); }
+    else if (h === 'ons') { switchToArs(); document.querySelector('.subnav-tab[data-tab="ons"]')?.click(); }
     else switchToMundo();
     _hashChanging = false;
   });
@@ -1677,3 +1689,150 @@ function renderCERCurve(items) {
   });
 }
 
+
+// ─── ONs (Obligaciones Negociables) section ───
+let onsChart = null;
+async function loadONs() {
+  const container = document.getElementById('ons-list');
+  container.innerHTML = '<p style="text-align:center;color:var(--text-secondary)">Cargando ONs...</p>';
+  try {
+    const [configRes, pricesRes] = await Promise.all([
+      fetch('/api/config').then(r => r.json()),
+      fetch('/api/ons').then(r => r.json())
+    ]);
+    const onsConfig = configRes.ons || {};
+    const prices = (pricesRes.data || []);
+    const today = new Date();
+    const items = [];
+    const priceLookup = {};
+    for (const p of prices) { priceLookup[p.symbol] = p; }
+    for (const [key, bond] of Object.entries(onsConfig)) {
+      const d912Ticker = bond.ticker_d912;
+      const priceData = priceLookup[d912Ticker];
+      if (!priceData || !priceData.c || priceData.c <= 0) continue;
+      const priceUSD = priceData.c;
+      const futureFlows = bond.flujos
+        .map(f => ({ fecha: parseLocalDate(f.fecha), monto: f.monto }))
+        .filter(f => f.fecha > today);
+      if (futureFlows.length === 0) continue;
+      const ytm = calcYTM(priceUSD / 100, futureFlows, today);
+      if (isNaN(ytm) || !isFinite(ytm)) continue;
+      const duration = calcDuration(priceUSD / 100, futureFlows, today, ytm);
+      items.push({ symbol: key, d912Ticker, priceUSD, ytm, duration, vencimiento: bond.vencimiento, volume: priceData.v || 0, flujos: futureFlows });
+    }
+    items.sort((a, b) => a.duration - b.duration);
+    renderONsTable(container, items);
+    renderONsYieldCurve(items);
+    document.getElementById('ons-source').textContent = `Fuente: data912 (precios) — ${items.length} ONs corporativas`;
+  } catch(err) {
+    container.innerHTML = '<p style="color:var(--red)">Error cargando ONs: ' + err.message + '</p>';
+  }
+}
+
+function renderONsTable(container, items) {
+  let html = `<div style="overflow-x:auto"><table class="soberanos-table">
+    <thead><tr><th>TICKER</th><th>PRECIO</th><th>TIR</th><th class="col-duration">DURATION</th><th class="col-vto">VENCIMIENTO</th></tr></thead><tbody>`;
+  for (const item of items) {
+    const tirColor = item.ytm >= 0 ? 'var(--green)' : 'var(--red)';
+    html += `<tr class="on-row" data-symbol="${item.symbol}" style="cursor:pointer">
+      <td><strong style="color:var(--accent)">${item.d912Ticker}</strong></td>
+      <td style="font-family:var(--font-mono);text-align:right">$${item.priceUSD.toFixed(2)}</td>
+      <td style="font-family:var(--font-mono);text-align:right;color:${tirColor};font-weight:600">${item.ytm.toFixed(2)}%</td>
+      <td class="col-duration" style="font-family:var(--font-mono);text-align:right">${item.duration.toFixed(2)}</td>
+      <td class="col-vto">${item.vencimiento}</td></tr>`;
+  }
+  html += '</tbody></table></div>';
+  container.innerHTML = html;
+  container.querySelectorAll('.on-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const sym = row.dataset.symbol;
+      const item = items.find(i => i.symbol === sym);
+      if (item) openONCalculator(item);
+    });
+  });
+}
+
+function renderONsYieldCurve(items) {
+  const canvas = document.getElementById('ons-scatter');
+  if (!canvas) return;
+  if (onsChart) onsChart.destroy();
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const textColor = isDark ? '#a0a0a8' : '#6b7280';
+  const gridColor = isDark ? '#2a2a30' : '#e5e7eb';
+  const points = items.map(i => ({ x: i.duration, y: i.ytm, label: i.d912Ticker }));
+  const curvePoints = points.length >= 3 ? fitPolyCurve(points.map(p => [p.x, p.y]), 2, 200) : [];
+  const datasets = [{
+    label: 'ONs', data: points, backgroundColor: '#f97316', borderColor: '#f97316',
+    pointRadius: 6, pointHoverRadius: 8, showLine: false,
+  }];
+  if (curvePoints.length > 0) {
+    datasets.push({
+      label: 'Curva', data: curvePoints, borderColor: '#f97316', borderWidth: 2,
+      borderDash: [6, 3], pointRadius: 0, showLine: true, tension: 0, fill: false,
+    });
+  }
+  onsChart = new Chart(canvas, {
+    type: 'scatter', data: { datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => { const p = ctx.raw; return p.label ? `${p.label}: ${p.y.toFixed(2)}%` : `${p.y.toFixed(2)}%`; } } } },
+      scales: {
+        x: { type: 'linear', title: { display: true, text: 'Duration (años)', color: textColor }, grid: { color: gridColor }, ticks: { color: textColor } },
+        y: { type: 'linear', title: { display: true, text: 'TIR (%)', color: textColor }, grid: { color: gridColor }, ticks: { color: textColor, callback: v => v.toFixed(1) + '%' } }
+      }
+    }
+  });
+}
+
+function openONCalculator(item) {
+  document.querySelector('.mundo-modal-overlay')?.remove();
+  const overlay = document.createElement('div');
+  overlay.className = 'mundo-modal-overlay';
+  const flowsHTML = item.flujos.map(f =>
+    `<tr><td>${f.fecha.toLocaleDateString('es-AR')}</td><td style="text-align:right">${f.monto.toFixed(4)}</td></tr>`
+  ).join('');
+  overlay.innerHTML = `
+    <div class="mundo-modal">
+      <div class="mundo-modal-header">
+        <div><h3 style="margin:0">${item.d912Ticker} — Calculadora</h3>
+        <p style="margin:4px 0 0;color:var(--text-secondary);font-size:0.85rem">Vencimiento: ${item.vencimiento}</p></div>
+        <button class="mundo-modal-close">&times;</button>
+      </div>
+      <div class="mundo-modal-body" style="padding:16px">
+        <div style="display:flex;gap:24px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+          <div><label style="font-size:0.8rem;color:var(--text-secondary)">Precio USD</label>
+            <input type="number" id="on-calc-price" value="${item.priceUSD.toFixed(2)}" step="0.01"
+              style="display:block;font-size:1.2rem;font-weight:700;width:120px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)"></div>
+          <div><label style="font-size:0.8rem;color:var(--text-secondary)">TIR</label>
+            <div id="on-calc-tir" style="font-size:1.5rem;font-weight:700;color:${item.ytm >= 0 ? 'var(--green)' : 'var(--red)'}">${item.ytm.toFixed(2)}%</div></div>
+          <div><label style="font-size:0.8rem;color:var(--text-secondary)">Duration</label>
+            <div id="on-calc-duration" style="font-size:1.2rem;font-weight:600;color:var(--text)">${item.duration.toFixed(2)} años</div></div>
+        </div>
+        <h4 style="margin:12px 0 8px;font-size:0.85rem;color:var(--text-secondary)">Flujos de fondos (por 100 VN)</h4>
+        <div style="max-height:300px;overflow-y:auto">
+          <table style="width:100%;font-size:0.8rem;border-collapse:collapse">
+            <thead><tr><th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--border)">Fecha</th>
+            <th style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border)">Monto</th></tr></thead>
+            <tbody>${flowsHTML}</tbody>
+            <tfoot><tr style="font-weight:700;border-top:2px solid var(--border)">
+              <td style="padding:4px 8px">Total</td>
+              <td style="text-align:right;padding:4px 8px">${item.flujos.reduce((s, f) => s + f.monto, 0).toFixed(4)}</td></tr></tfoot>
+          </table></div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('.mundo-modal-close').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  const priceInput = document.getElementById('on-calc-price');
+  const tirDisplay = document.getElementById('on-calc-tir');
+  const durDisplay = document.getElementById('on-calc-duration');
+  priceInput.addEventListener('input', () => {
+    const newPrice = parseFloat(priceInput.value);
+    if (!newPrice || newPrice <= 0) return;
+    const today = new Date();
+    const newYtm = calcYTM(newPrice / 100, item.flujos, today);
+    const newDur = calcDuration(newPrice / 100, item.flujos, today, newYtm);
+    if (isFinite(newYtm)) { tirDisplay.textContent = newYtm.toFixed(2) + '%'; tirDisplay.style.color = newYtm >= 0 ? 'var(--green)' : 'var(--red)'; }
+    if (isFinite(newDur)) { durDisplay.textContent = newDur.toFixed(2) + ' años'; }
+  });
+}

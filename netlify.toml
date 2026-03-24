@@ -53,6 +53,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/ons"
+  to = "/.netlify/functions/ons"
+  status = 200
+
+[[redirects]]
   from = "/api/config"
   to = "/config.json"
   status = 200

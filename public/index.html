@@ -69,6 +69,7 @@
       <a href="#" class="subnav-tab" data-tab="plazofijo" role="tab" id="tab-plazofijo-tab" aria-selected="false" aria-controls="tab-plazofijo">Plazo Fijo</a>
       <a href="#" class="subnav-tab" data-tab="lecaps" role="tab" id="tab-lecaps-tab" aria-selected="false" aria-controls="tab-lecaps">LECAPs</a>
       <a href="#" class="subnav-tab" data-tab="cer" role="tab" id="tab-cer-tab" aria-selected="false" aria-controls="tab-cer">Bonos CER</a>
+      <a href="#" class="subnav-tab" data-tab="ons" role="tab" id="tab-ons-tab" aria-selected="false" aria-controls="tab-ons">ONs</a>
     </div>
   </nav>
 
@@ -179,11 +180,27 @@
       </section>
     </div>
 
+    <div id="tab-ons" role="tabpanel" aria-labelledby="tab-ons-tab" style="display:none">
+      <section class="section" id="ons-section">
+        <h2>Obligaciones Negociables (ONs)</h2>
+        <p class="section-desc">Rendimiento de bonos corporativos en USD — Click en una ON para abrir la calculadora</p>
+        <div id="ons-list"></div>
+        <p class="section-source" id="ons-source"></p>
+      </section>
+      <section class="section" id="ons-chart-section">
+        <h2>Curva de rendimientos ONs</h2>
+        <p class="section-desc">TIR vs Duration</p>
+        <div class="scatter-plot">
+          <canvas id="ons-scatter"></canvas>
+        </div>
+      </section>
+    </div>
+
   </main>
 
   <footer class="footer">
     <p class="visit-counter" id="visit-counter"></p>
-    <p>FCIs: CAFCI via ArgentinaDatos. Plazos Fijos: BCRA via ArgentinaDatos. LECAPs/BONCAPs: data912. Soberanos: data912.</p>
+    <p>FCIs: CAFCI via ArgentinaDatos. Plazos Fijos: BCRA via ArgentinaDatos. LECAPs/BONCAPs: data912. Soberanos: data912. ONs: data912.</p>
     <p>Hecho con ❤️ desde Argentina 🇦🇷</p>
   </footer>
 
