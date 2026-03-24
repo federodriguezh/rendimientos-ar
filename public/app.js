@@ -1925,31 +1925,32 @@ function openONCalculator(item) {
   function renderONFlows() {
     const price = parseFloat(document.getElementById('on-calc-price').value) || item.priceUSD;
     const monto = parseFloat(document.getElementById('on-calc-monto').value) || 10000;
-    const nominales = monto / (price / 100); // VN comprados
-    const scale = nominales / 100; // factor para escalar flujos de 100VN a la inversión
+    const pricePer1VN = price / 100; // precio por 1 VN
+    const nominales = monto / pricePer1VN; // VN comprados
+    const scale = nominales; // flujos son por 1 VN, multiplicar por cantidad de VN
     const flowsHTML = item.flujos.map(f => {
       const scaled = f.monto * scale;
-      return `<tr><td>${f.fecha.toLocaleDateString('es-AR')}</td><td style="text-align:right">$${f.monto.toFixed(4)}</td><td style="text-align:right;font-weight:600">$${scaled.toFixed(2)}</td></tr>`;
+      return `<tr><td>${f.fecha.toLocaleDateString('es-AR')}</td><td style="text-align:right">$${f.monto.toFixed(6)}</td><td style="text-align:right;font-weight:600">$${scaled.toFixed(2)}</td></tr>`;
     }).join('');
-    const totalPer100 = item.flujos.reduce((s, f) => s + f.monto, 0);
-    const totalScaled = totalPer100 * scale;
+    const totalPer1VN = item.flujos.reduce((s, f) => s + f.monto, 0);
+    const totalScaled = totalPer1VN * scale;
     const ganancia = totalScaled - monto;
     document.getElementById('on-calc-flows').innerHTML = `
       <table style="width:100%;font-size:0.8rem;border-collapse:collapse">
         <thead><tr><th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--border)">Fecha</th>
-        <th style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border)">Por 100 VN</th>
+        <th style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border)">Por 1 VN</th>
         <th style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--border)">Tu inversión</th></tr></thead>
         <tbody>${flowsHTML}</tbody>
         <tfoot>
           <tr style="font-weight:700;border-top:2px solid var(--border)">
-            <td style="padding:4px 8px">Total cobros</td><td style="text-align:right;padding:4px 8px">$${totalPer100.toFixed(4)}</td>
+            <td style="padding:4px 8px">Total cobros</td><td style="text-align:right;padding:4px 8px">$${totalPer1VN.toFixed(6)}</td>
             <td style="text-align:right;padding:4px 8px">$${totalScaled.toFixed(2)}</td></tr>
           <tr style="font-weight:700;color:${ganancia >= 0 ? 'var(--green)' : 'var(--red)'}">
             <td style="padding:4px 8px">Ganancia</td><td></td>
             <td style="text-align:right;padding:4px 8px">${ganancia >= 0 ? '+' : ''}$${ganancia.toFixed(2)}</td></tr>
         </tfoot>
       </table>
-      <p style="font-size:0.7rem;color:var(--text-tertiary);margin-top:8px">Comprás ${nominales.toFixed(0)} VN a $${price.toFixed(2)} cada 100 VN</p>`;
+      <p style="font-size:0.7rem;color:var(--text-tertiary);margin-top:8px">Comprás ${nominales.toFixed(0)} VN a $${pricePer1VN.toFixed(4)}/VN (precio ${price.toFixed(2)} por 100 VN)</p>`;
   }
   renderONFlows();
 
