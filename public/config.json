@@ -4118,6 +4118,32 @@
           "base": 0.5
         }
       ]
+    },
+    "X15Y6": {
+      "tipo": "CER",
+      "vencimiento": "2026-05-15",
+      "cer_emision": 701.614,
+      "flujos": [
+        {
+          "fecha": "2026-05-15",
+          "amortizacion": 1.0,
+          "tasa_interes": 0.0,
+          "base": 0.5
+        }
+      ]
+    },
+    "X29Y6": {
+      "tipo": "CER",
+      "vencimiento": "2026-05-29",
+      "cer_emision": 651.8981,
+      "flujos": [
+        {
+          "fecha": "2026-05-29",
+          "amortizacion": 1.0,
+          "tasa_interes": 0.0,
+          "base": 0.5
+        }
+      ]
     }
   }
 }
