@@ -8,9 +8,20 @@ Sitio para comparar rendimientos de productos financieros en Argentina y monitor
 - Fondos comunes de inversión de liquidez
 - Plazos fijos
 - LECAPs y BONCAPs
+- Bonos CER (ajustados por inflación)
 - Bonos soberanos USD (ley local + ley NY)
+- Obligaciones Negociables (ONs) corporativas en USD
 
-Live en [rendimientos.co](https://rendimientos.co)
+Live en [rendimientos.co](https://rendimientos.co) — PWA instalable.
+
+## Secciones
+
+| Sección (header) | Contenido |
+|-------------------|-----------|
+| 🌍 Mundo | Monitor global con 8 indicadores + sparklines intradiarias + gráficos ampliados |
+| 🇦🇷 ARS | Billeteras, FCIs, Plazo Fijo, LECAPs/BONCAPs, Bonos CER |
+| 🏛️ Bonos | Soberanos USD (ley local + ley NY) con yield curve |
+| 🏢 ONs | Obligaciones Negociables corporativas USD con calculadora interactiva |
 
 ## Fuentes de datos
 
@@ -22,29 +33,38 @@ Live en [rendimientos.co](https://rendimientos.co)
 | FCIs | [ArgentinaDatos](https://api.argentinadatos.com) via CAFCI | En vivo |
 | Plazo Fijo | [ArgentinaDatos](https://api.argentinadatos.com/v1/finanzas/tasas/plazoFijo) | En vivo |
 | LECAPs/BONCAPs | [data912](https://data912.com) (`/live/arg_notes` + `/live/arg_bonds`) | En vivo |
+| Bonos CER | [BCRA](https://api.bcra.gob.ar) (índice CER) + [data912](https://data912.com/live/arg_bonds) (precios) | En vivo |
 | Soberanos USD | [data912](https://data912.com/live/arg_bonds) (tickers con sufijo D) | En vivo |
+| ONs | [data912](https://data912.com/live/arg_corp) (precios USD) | En vivo |
 
 ## Estructura
 
 ```
 public/
-  index.html         Pagina principal (3 secciones: Mundo, ARS, Bonos USD)
-  app.js             Logica del frontend
-  config.json        Billeteras, FCIs, LECAPs, Soberanos (flujos)
+  index.html         Página principal (4 secciones: Mundo, ARS, Bonos, ONs)
+  app.js             Lógica del frontend
+  config.json        Billeteras, FCIs, LECAPs, Soberanos, CER, ONs (flujos)
   styles.css         Estilos + dark mode
+  manifest.json      PWA manifest
+  sw.js              Service worker
+  icons/             Íconos PWA (192x192, 512x512)
   comparar.html      Comparador de fondos (deshabilitado)
 server.js            Servidor Express para desarrollo local
 netlify/functions/
-  cafci.js           Proxy ArgentinaDatos -> FCIs con TNA calculada
-  lecaps.js          Proxy data912 -> precios de LECAPs y BONCAPs
-  soberanos.js       Proxy data912 -> precios de bonos soberanos en USD
-  mundo.js           Proxy Yahoo Finance -> futuros, commodities, crypto (con sparklines)
-  news.js            Proxy Google News RSS -> noticias financieras en tiempo real
-  visits.js          Contador de visitas publico
+  cafci.js           Proxy ArgentinaDatos → FCIs con TNA calculada
+  lecaps.js          Proxy data912 → precios de LECAPs y BONCAPs
+  soberanos.js       Proxy data912 → precios de bonos soberanos en USD
+  ons.js             Proxy data912 → precios de ONs corporativas en USD
+  cer.js             BCRA API → índice CER T-10
+  cer-precios.js     Proxy data912 → precios de bonos CER
+  cer-ultimo.js      BCRA API → último CER publicado (para UI)
+  mundo.js           Proxy Yahoo Finance → futuros, commodities, crypto (con sparklines)
+  news.js            Proxy Google News RSS → noticias financieras en tiempo real
+  visits.js          Contador de visitas público
 netlify.toml         Deploy config y redirects API
 ```
 
-## Como levantar localmente
+## Cómo levantar localmente
 
 ```bash
 npm install
@@ -52,42 +72,51 @@ npm start
 # http://localhost:3000
 ```
 
-Nota: las Netlify functions (mundo, soberanos, etc.) solo funcionan en produccion. El server local sirve FCIs y config.
+Las Netlify functions (mundo, soberanos, ons, cer, etc.) solo funcionan en producción. El server local sirve FCIs y config.
 
 ## Endpoints
 
-| Ruta | Descripcion |
+| Ruta | Descripción |
 |------|-------------|
 | `GET /api/mundo` | Monitor global: precios + sparklines intradiarias (Yahoo Finance) |
-| `GET /api/news` | Noticias financieras ultimas 3h (Google News RSS) |
-| `GET /api/config` | Config estatica (billeteras, FCIs, LECAPs, soberanos) |
+| `GET /api/mundo?symbol=X&range=Y` | Gráfico ampliado de un indicador (1d, 5d, 1m, 3m) |
+| `GET /api/news` | Noticias financieras últimas 3h (Google News RSS) |
+| `GET /api/config` | Config estática (billeteras, FCIs, LECAPs, soberanos, CER, ONs) |
 | `GET /api/fci` | FCIs con TNA calculada (proxy ArgentinaDatos) |
 | `GET /api/lecaps` | Precios LECAP/BONCAP en vivo (proxy data912) |
 | `GET /api/soberanos` | Bonos soberanos precios en USD (proxy data912) |
+| `GET /api/ons` | ONs corporativas precios en USD (proxy data912) |
+| `GET /api/cer` | Índice CER T-10 (BCRA) |
+| `GET /api/cer-precios` | Bonos CER precios en ARS (proxy data912) |
+| `GET /api/cer-ultimo` | Último CER publicado (BCRA) |
 | `GET /api/visits` | Contador de visitas |
 
-## Monitor Global
+## Features
 
-Muestra 8 indicadores en tiempo real con sparklines intradiarias: S&P 500, Nasdaq 100, WTI, Tasa 10Y USA, Oro, Bitcoin, Ethereum, EUR/USD. Cada tarjeta muestra precio, variacion porcentual y mini grafico del dia con punto parpadeante.
+### Monitor Global
+8 indicadores en tiempo real con sparklines intradiarias: S&P 500, Nasdaq 100, WTI, Tasa 10Y USA, Oro, Bitcoin, Ethereum, EUR/USD. Click en cualquier tarjeta para gráfico ampliado con rangos 1D/5D/1M/3M. Punto parpadeante indica datos en vivo.
 
-## Noticias (marquesina)
+### Noticias (marquesina)
+Cinta horizontal con las últimas noticias financieras. Se actualiza cada 2 minutos. Botón para ocultar.
 
-Cinta horizontal con las ultimas noticias financieras. Se actualiza cada 2 minutos. Fuentes: Bloomberg Linea, Infobae, El Cronista, CriptoNoticias, Investing.com, etc.
+### LECAPs y BONCAPs
+Precios en vivo de data912. TIR y TNA calculadas desde fecha de liquidación T+1 (saltando feriados AR). Scatter plot con curva polinómica. Tablas con columnas ordenables. Click en cualquier LECAP para calculadora interactiva (modificar precio → TIR/TNA se recalculan).
 
-## LECAPs y BONCAPs
+### Bonos CER
+Bonos ajustados por inflación. Precios en ARS de data912, índice CER de BCRA (T-10). TIR real calculada con flujos ajustados por coeficiente CER (CER_actual / CER_emisión). Bonos: TX26, TX28, TZX26, TZX27, TZX28, TZXO6, TZXD6, TZXM6, TZXM7, TZXD7, DICP, PARP.
 
-1. Precios en vivo de data912 (`/live/arg_notes` + `/live/arg_bonds`), campo `c` (ultimo operado)
-2. Pago final y vencimiento en `config.json`
-3. TIR y TNA calculadas desde fecha de liquidacion T+1 (saltando feriados AR)
-4. Scatter plot con curva polinomica
+### Soberanos USD
+Precios en USD de data912 (tickers con sufijo "D"). Flujos de fondos hardcodeados en config.json por cada 100 VN. TIR (YTM) via Newton-Raphson, Duration Macaulay. Yield curve separada por ley local (naranja) y ley NY (azul). Click para calculadora. Bonos: AO27, AN29, BPD7, AL29, AL30, AL35, AE38, AL41 + GD29, GD30, GD35, GD38, GD41.
 
-## Soberanos USD
+### ONs (Obligaciones Negociables)
+56 bonos corporativos en USD. Precios en vivo de data912 (`/live/arg_corp`). Flujos de fondos de Cashflows.xlsx. TIR y Duration calculados. Yield curve con regresión polinómica. Click en cualquier ON para calculadora interactiva (modificar precio → TIR/Duration se recalculan en vivo).
 
-1. Precios en USD de data912 (tickers con sufijo "D": AL30D, GD30D, etc.)
-2. Flujos de fondos (cupones + amortizacion) en `config.json`, por cada 100 VN
-3. TIR (YTM) via Newton-Raphson, Duration Macaulay
-4. Yield curve: scatter plot separado por ley local (naranja) y ley NY (azul)
-5. Bonos: AO27, AN29, AL29, AL30, AL35, AE38, AL41 + GD29, GD30, GD35, GD38, GD41 + BPD7
+### Otras features
+- Dark mode con toggle (persiste en localStorage)
+- PWA instalable (manifest + service worker)
+- Contador de visitas público
+- Tablas ordenables (click en headers para sort asc/desc)
+- Responsive mobile (scroll horizontal en tablas)
 
 ## Deploy
 
