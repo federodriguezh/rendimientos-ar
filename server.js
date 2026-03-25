@@ -309,6 +309,52 @@ app.get('/api/hot-movers', async (req, res) => {
   }
 });
 
+// --- Cotizaciones (Dólar Oficial, CCL, MEP, Riesgo País) ---
+
+app.get('/api/cotizaciones', async (req, res) => {
+  try {
+    const [yahooResp, bondsResp, riesgoResp] = await Promise.allSettled([
+      fetch('https://query1.finance.yahoo.com/v8/finance/chart/ARS%3DX?interval=1d&range=5d', { headers: { 'User-Agent': 'Mozilla/5.0' } }).then(r => r.json()),
+      fetch('https://data912.com/live/arg_bonds').then(r => r.json()),
+      fetch('https://api.argentinadatos.com/v1/finanzas/indices/riesgo-pais/ultimo').then(r => r.json()),
+    ]);
+
+    let oficial = null;
+    if (yahooResp.status === 'fulfilled') {
+      try {
+        const meta = yahooResp.value.chart.result[0].meta;
+        oficial = { price: meta.regularMarketPrice, prevClose: meta.chartPreviousClose || meta.previousClose || 0 };
+      } catch (e) { /* ignore */ }
+    }
+
+    let ccl = null, mep = null;
+    if (bondsResp.status === 'fulfilled' && Array.isArray(bondsResp.value)) {
+      const al30 = bondsResp.value.find(b => b.symbol === 'AL30');
+      const al30d = bondsResp.value.find(b => b.symbol === 'AL30D');
+      const al30c = bondsResp.value.find(b => b.symbol === 'AL30C');
+      const arsPrice = al30 ? parseFloat(al30.c) : 0;
+      if (al30c && arsPrice > 0) {
+        const cclUsd = parseFloat(al30c.c);
+        if (cclUsd > 0) ccl = { price: Math.round((arsPrice / cclUsd) * 100) / 100 };
+      }
+      if (al30d && arsPrice > 0) {
+        const mepUsd = parseFloat(al30d.c);
+        if (mepUsd > 0) mep = { price: Math.round((arsPrice / mepUsd) * 100) / 100 };
+      }
+    }
+
+    let riesgoPais = null;
+    if (riesgoResp.status === 'fulfilled' && riesgoResp.value && riesgoResp.value.valor != null) {
+      riesgoPais = { value: riesgoResp.value.valor };
+    }
+
+    res.json({ oficial, ccl, mep, riesgoPais, updated: new Date().toISOString() });
+  } catch (err) {
+    console.error('Cotizaciones proxy error:', err.message);
+    res.status(502).json({ error: 'Failed to fetch cotizaciones' });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
 });

@@ -93,6 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupKeyboardNav();
   loadMundo();
   loadHotMovers();
+  loadCotizaciones();
   loadNewsTicker();
   initSupabase();
 
@@ -1840,6 +1841,49 @@ async function loadMundoChart(buildUrl, range) {
     if (loading) loading.textContent = 'Error al cargar datos.';
     console.error('Detail chart error:', e);
   }
+}
+
+// ─── Cotizaciones Strip ───
+async function loadCotizaciones() {
+  try {
+    const res = await fetch('/api/cotizaciones');
+    if (!res.ok) throw new Error('Cotizaciones API error');
+    const data = await res.json();
+
+    const strip = document.getElementById('cotizaciones-strip');
+    const inner = document.getElementById('cotizaciones-strip-inner');
+    if (!strip || !inner) return;
+
+    const items = [];
+
+    if (data.oficial) {
+      items.push({ label: 'Dólar Oficial', price: `$${formatCotizPrice(data.oficial.price)}` });
+    }
+    if (data.ccl) {
+      items.push({ label: 'Contado con Liqui', price: `$${formatCotizPrice(data.ccl.price)}` });
+    }
+    if (data.mep) {
+      items.push({ label: 'Dólar MEP', price: `$${formatCotizPrice(data.mep.price)}` });
+    }
+    if (data.riesgoPais) {
+      items.push({ label: 'Riesgo País', price: data.riesgoPais.value.toLocaleString('es-AR') });
+    }
+
+    if (items.length === 0) return;
+
+    inner.innerHTML = items.map(item =>
+      `<div class="cotiz-item"><span class="cotiz-label">${item.label}</span><span class="cotiz-price">${item.price}</span></div>`
+    ).join('');
+
+    strip.classList.add('loaded');
+  } catch (e) {
+    console.error('Cotizaciones strip error:', e);
+  }
+}
+
+function formatCotizPrice(val) {
+  if (val == null) return '—';
+  return val.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 // ─── News Ticker ───
