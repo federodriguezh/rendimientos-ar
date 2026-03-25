@@ -1186,9 +1186,9 @@ function renderSoberanosTable(container, items) {
       <td><span class="soberano-ticker">${item.symbol}</span><span class="soberano-ley ${leyClass}">${leyLabel}</span></td>
       <td class="col-ley">${leyLabel}</td>
       <td>US$${item.priceUsd.toFixed(2)}</td>
-      <td class="soberano-ytm">${item.ytm.toFixed(2)}%</td>
       <td class="col-duration">${item.duration.toFixed(1)}</td>
       <td class="col-vto">${item.vencimiento}</td>
+      <td class="lecap-tir">${item.ytm.toFixed(2)}%</td>
     </tr>`;
   }).join('');
 
@@ -1200,9 +1200,9 @@ function renderSoberanosTable(container, items) {
             <th>Ticker</th>
             <th class="col-ley">Ley</th>
             <th>Precio</th>
-            <th>TIR</th>
             <th class="col-duration">Duration</th>
             <th class="col-vto">Vencimiento</th>
+            <th>TIR</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
@@ -1837,9 +1837,9 @@ function renderCERTable(container, items) {
     return `<tr data-cer-idx="${idx}" style="cursor:pointer">
       <td><span class="soberano-ticker">${item.symbol}</span></td>
       <td>$${item.priceArs.toFixed(2)}</td>
-      <td class="soberano-ytm">${item.ytm.toFixed(2)}%</td>
       <td class="col-duration">${item.duration.toFixed(1)}</td>
       <td class="col-vto">${item.vencimiento}</td>
+      <td class="lecap-tir">${item.ytm.toFixed(2)}%</td>
     </tr>`;
   }).join('');
 
@@ -1851,9 +1851,9 @@ function renderCERTable(container, items) {
           <tr>
             <th>TICKER</th>
             <th>PRECIO (AR$)</th>
-            <th>TIR REAL</th>
             <th class="col-duration">DURATION</th>
             <th class="col-vto">VENCIMIENTO</th>
+            <th>TIR REAL</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
@@ -2072,16 +2072,16 @@ async function loadONs() {
 
 function renderONsTable(container, items) {
   let html = `<div style="overflow-x:auto"><table class="soberanos-table">
-    <thead><tr><th>TICKER</th><th>EMISOR</th><th>PRECIO</th><th>TIR</th><th class="col-duration">DURATION</th><th class="col-vto">VENCIMIENTO</th></tr></thead><tbody>`;
+    <thead><tr><th>TICKER</th><th>EMISOR</th><th>PRECIO</th><th class="col-duration">DURATION</th><th class="col-vto">VENCIMIENTO</th><th>TIR</th></tr></thead><tbody>`;
   for (const item of items) {
     const tirColor = item.ytm >= 0 ? 'var(--green)' : 'var(--red)';
     html += `<tr class="on-row" data-symbol="${item.symbol}" style="cursor:pointer">
       <td><strong style="color:var(--accent)">${item.d912Ticker}</strong></td>
       <td style="font-size:0.8rem;color:var(--text-secondary)">${item.nombre || ''}</td>
       <td style="font-family:var(--font-mono);text-align:right">$${item.priceUSD.toFixed(2)}</td>
-      <td style="font-family:var(--font-mono);text-align:right;color:${tirColor};font-weight:600">${item.ytm.toFixed(2)}%</td>
       <td class="col-duration" style="font-family:var(--font-mono);text-align:right">${item.duration.toFixed(2)}</td>
-      <td class="col-vto">${item.vencimiento}</td></tr>`;
+      <td class="col-vto">${item.vencimiento}</td>
+      <td class="lecap-tir" style="text-align:right">${item.ytm.toFixed(2)}%</td></tr>`;
   }
   html += '</tbody></table></div><p class="calc-hint">💡 <span>Click</span> en cualquier ON para abrir la calculadora</p>';
   container.innerHTML = html;
