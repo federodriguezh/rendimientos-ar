@@ -824,6 +824,7 @@ function renderLecapScatter(items) {
   const canvas = document.getElementById('lecaps-scatter');
   if (!canvas || typeof Chart === 'undefined') return;
 
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
   const textColor = '#555555';
   const gridColor = '#1a1a1a';
 
@@ -1696,16 +1697,7 @@ async function loadMundoChart(buildUrl, range) {
             const idx = elements[0].index;
             chart._crosshairX = elements[0].element.x;
             updateMundoHeader(mundoDetailPoints, idx);
-    } else if ((type === 'accion' || type === 'cedear') && tickers.length === 0) {
-      select.style.display = 'none';
-      select.insertAdjacentHTML('afterend', '<div id="modal-custom-fields" style="margin-top:12px"><label style="font-size:0.8rem;color:var(--text-secondary)">Ticker</label><input type="text" id="modal-custom-name" value="' + (existing?.ticker || '') + '" placeholder="Ej: GGAL, AAPL" style="display:block;width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:0.95rem;font-weight:600;font-family:var(--font);background:var(--bg);color:var(--text)"></div>');
-      overlay.querySelector('#modal-qty-label').textContent = ASSET_TYPES[type]?.qtyLabel || 'Cantidad';
-      const phFallback = { accion: { hint: '(ARS por acción)', example: 'Precio en ARS por acción. Ej: GGAL a $6.735', placeholder: 'Ej: 6735' }, cedear: { hint: '(ARS por CEDEAR)', example: 'Precio en ARS por CEDEAR. Ej: AAPL a $18.430', placeholder: 'Ej: 18430' } };
-      const phf = phFallback[type] || {};
-      overlay.querySelector('#modal-price-hint').textContent = phf.hint || '';
-      overlay.querySelector('#modal-price-example').textContent = phf.example || '';
-      overlay.querySelector('#modal-price').placeholder = phf.placeholder || '';
-    } else {
+          } else {
             chart._crosshairX = null;
             updateMundoHeader(mundoDetailPoints, null);
           }
@@ -3021,6 +3013,15 @@ function openAddHoldingModal(editId) {
       overlay.querySelector('#modal-price-hint').textContent = '(precio de compra por unidad)';
       overlay.querySelector('#modal-price-example').textContent = 'Precio al que compraste cada unidad';
       overlay.querySelector('#modal-price').placeholder = 'Ej: 65000';
+    } else if ((type === 'accion' || type === 'cedear') && tickers.length === 0) {
+      select.style.display = 'none';
+      select.insertAdjacentHTML('afterend', '<div id="modal-custom-fields" style="margin-top:12px"><label style="font-size:0.8rem;color:var(--text-secondary)">Ticker</label><input type="text" id="modal-custom-name" value="' + (existing?.ticker || '') + '" placeholder="Ej: GGAL, AAPL" autocomplete="off" spellcheck="false" style="display:block;width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:0.95rem;font-weight:600;font-family:var(--font);background:var(--bg);color:var(--text)"></div>');
+      overlay.querySelector('#modal-qty-label').textContent = ASSET_TYPES[type]?.qtyLabel || 'Cantidad';
+      const phFallback = { accion: { hint: '(ARS por acción)', example: 'Precio en ARS por acción. Ej: GGAL a $6.735', placeholder: 'Ej: 6735' }, cedear: { hint: '(ARS por CEDEAR)', example: 'Precio en ARS por CEDEAR. Ej: AAPL a $18.430', placeholder: 'Ej: 18430' } };
+      const phf = phFallback[type] || {};
+      overlay.querySelector('#modal-price-hint').textContent = phf.hint || '';
+      overlay.querySelector('#modal-price-example').textContent = phf.example || '';
+      overlay.querySelector('#modal-price').placeholder = phf.placeholder || '';
     } else {
       select.style.display = '';
       select.innerHTML = tickers.map(t => `<option value="${t}" ${existing?.ticker === t ? 'selected' : ''}>${t}</option>`).join('');
@@ -3064,7 +3065,7 @@ function openAddHoldingModal(editId) {
       metadata = { currency: curr, current_price: curPrice || null };
     }
     if ((selectedType === 'accion' || selectedType === 'cedear') && overlay.querySelector('#modal-custom-name')) {
-      ticker = overlay.querySelector('#modal-custom-name')?.value?.trim() || '';
+      ticker = overlay.querySelector('#modal-custom-name')?.value?.trim().toUpperCase() || '';
     }
 
     if (!selectedType || !ticker || !qty || !date) {
@@ -3079,7 +3080,7 @@ function openAddHoldingModal(editId) {
     }
 
     // ─── Input validation (defense in depth) ───
-    const VALID_TYPES = ['soberano', 'on', 'cer', 'lecap', 'fci', 'garantizado', 'cash', 'custom'];
+    const VALID_TYPES = ['soberano', 'on', 'cer', 'lecap', 'accion', 'cedear', 'fci', 'garantizado', 'cash', 'custom'];
     if (!VALID_TYPES.includes(selectedType)) {
       errorEl.textContent = 'Tipo de activo inválido';
       errorEl.style.display = '';

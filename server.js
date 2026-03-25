@@ -166,78 +166,33 @@ app.get('/api/lecaps', async (req, res) => {
 
 app.get('/api/cer', async (req, res) => {
   try {
-    const fs = require('fs');
-    const path = require('path');
-    
-    // Leer serie histórica de CER
-    const cerPath = path.join(__dirname, 'data_base', 'CER_serie.csv');
-    const cerData = fs.readFileSync(cerPath, 'utf-8');
-    const lines = cerData.trim().split('\n').slice(1); // Skip header
-    
-    // Parsear CSV
-    const cerSerie = lines.map(line => {
-      const [fecha, valor] = line.split(',');
-      return { fecha, valor: parseFloat(valor) };
+    const response = await fetch('https://api.bcra.gob.ar/estadisticas/v4.0/Monetarias/30', {
+      headers: { 'Accept': 'application/json' }
     });
-    
+    if (!response.ok) throw new Error('BCRA API error: ' + response.status);
+
+    const data = await response.json();
+    const detalle = data.results?.[0]?.detalle;
+    if (!detalle?.length) throw new Error('No CER data available');
+
     // Calcular fecha T-10 (10 días hábiles antes del settlement T+1)
-    // Aproximación: restar 14 días calendario desde hoy
     const hoy = new Date();
     const t1 = new Date(hoy);
-    t1.setDate(t1.getDate() + 1); // Settlement T+1
+    t1.setDate(t1.getDate() + 1);
     const fc = new Date(t1);
-    fc.setDate(fc.getDate() - 14); // T-10 aproximado
-    
+    fc.setDate(fc.getDate() - 14);
     const fcStr = fc.toISOString().split('T')[0];
-    
-    // Buscar CER más cercano a fc (T-10)
+
+    // BCRA retorna datos en orden descendente (más reciente primero)
     let cerT10 = null;
-    for (let i = cerSerie.length - 1; i >= 0; i--) {
-      if (cerSerie[i].fecha <= fcStr) {
-        cerT10 = cerSerie[i];
-        break;
-      }
+    for (let i = 0; i < detalle.length; i++) {
+      if (detalle[i].fecha <= fcStr) { cerT10 = detalle[i]; break; }
     }
-    
-    if (!cerT10) {
-      // Fallback: usar el último disponible
-      cerT10 = cerSerie[cerSerie.length - 1];
-    }
-    
-    res.json({
-      cer: cerT10.valor,
-      fecha: cerT10.fecha,
-      fuente: 'Serie histórica CER'
-    });
+    if (!cerT10) cerT10 = detalle[detalle.length - 1];
+
+    res.json({ cer: cerT10.valor, fecha: cerT10.fecha, fuente: 'BCRA (T-10)' });
   } catch (err) {
     console.error('CER proxy error:', err.message);
-    res.status(502).json({ error: 'Failed to fetch CER data' });
-  }
-});
-
-// --- Último CER publicado (para mostrar en UI) ---
-
-app.get('/api/cer-ultimo', async (req, res) => {
-  try {
-    const fs = require('fs');
-    const path = require('path');
-    
-    // Leer serie histórica de CER
-    const cerPath = path.join(__dirname, 'data_base', 'CER_serie.csv');
-    const cerData = fs.readFileSync(cerPath, 'utf-8');
-    const lines = cerData.trim().split('\n').slice(1); // Skip header
-    
-    // Último CER es la última línea
-    const lastLine = lines[lines.length - 1];
-    const [fecha, valor] = lastLine.split(',');
-    
-    res.json({
-      cer: parseFloat(valor),
-      fecha: fecha,
-      fuente: 'Serie histórica CER'
-    });
-  } catch (err) {
-    console.error('CER último proxy error:', err.message);
     res.status(502).json({ error: 'Failed to fetch CER data' });
   }
 });
@@ -376,6 +331,189 @@ app.get('/api/cotizaciones', async (req, res) => {
   } catch (err) {
     console.error('Cotizaciones proxy error:', err.message);
     res.status(502).json({ error: 'Failed to fetch cotizaciones' });
+  }
+});
+
+// --- ONs (Corporate Bonds via data912) ---
+
+app.get('/api/ons', async (req, res) => {
+  try {
+    const response = await fetch('https://data912.com/live/arg_corp');
+    const data = await response.json();
+
+    const usdBonds = (Array.isArray(data) ? data : []).filter(b => b.symbol.endsWith('D') && b.c > 0);
+
+    res.json({ data: usdBonds, timestamp: new Date().toISOString() });
+  } catch (err) {
+    console.error('ONs proxy error:', err.message);
+    res.status(502).json({ error: 'Failed to fetch ON prices' });
+  }
+});
+
+// --- Mundo (Global Markets via Yahoo Finance) ---
+
+const MUNDO_SYMBOLS = [
+  { id: 'spx', symbol: 'ES%3DF', name: 'S&P 500', icon: '📈' },
+  { id: 'nasdaq', symbol: 'NQ%3DF', name: 'Nasdaq 100', icon: '💻' },
+  { id: 'dow', symbol: 'YM%3DF', name: 'Dow Jones', icon: '🏦' },
+  { id: 'tnx', symbol: '%5ETNX', name: 'Tasa 10Y USA', icon: '🏛️' },
+  { id: 'oil', symbol: 'CL%3DF', name: 'Petróleo WTI', icon: '🛢️' },
+  { id: 'brent', symbol: 'BZ%3DF', name: 'Petróleo Brent', icon: '🛢️' },
+  { id: 'gold', symbol: 'GC%3DF', name: 'Oro', icon: '🥇' },
+  { id: 'btc', symbol: 'BTC-USD', name: 'Bitcoin', icon: '₿' },
+  { id: 'eth', symbol: 'ETH-USD', name: 'Ethereum', icon: 'Ξ' },
+  { id: 'eurusd', symbol: 'EURUSD%3DX', name: 'EUR/USD', icon: '🇪🇺' },
+];
+
+function fetchYahooRaw(symbolEncoded, interval, range) {
+  return new Promise((resolve, reject) => {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbolEncoded}?interval=${interval}&range=${range}`;
+    const req = require('https').get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, res => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          const result = json.chart.result[0];
+          const meta = result.meta;
+          const closes = result.indicators.quote[0].close || [];
+          const spark = closes.filter(v => v !== null);
+          resolve({ price: meta.regularMarketPrice, prevClose: meta.chartPreviousClose || meta.previousClose || 0, sparkline: spark });
+        } catch (e) { reject(e); }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(8000, () => { req.destroy(); reject(new Error('timeout')); });
+  });
+}
+
+function fetchYahooChart(symbolEncoded, interval, range) {
+  return new Promise((resolve, reject) => {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbolEncoded}?interval=${interval}&range=${range}`;
+    const req = require('https').get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, res => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          const result = json.chart.result[0];
+          const timestamps = result.timestamp || [];
+          const closes = result.indicators.quote[0].close || [];
+          const points = [];
+          for (let i = 0; i < timestamps.length; i++) {
+            if (closes[i] !== null) points.push({ t: timestamps[i] * 1000, v: closes[i] });
+          }
+          resolve(points);
+        } catch (e) { reject(e); }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(8000, () => { req.destroy(); reject(new Error('timeout')); });
+  });
+}
+
+app.get('/api/mundo', async (req, res) => {
+  const qs = req.query || {};
+
+  // Detail mode: /api/mundo?symbol=btc  OR  /api/mundo?ticker=AAPL
+  if (qs.symbol || qs.ticker) {
+    try {
+      let symEncoded, id, name, icon;
+      if (qs.ticker) {
+        symEncoded = encodeURIComponent(qs.ticker.toUpperCase());
+        id = qs.ticker.toLowerCase();
+        name = qs.name || qs.ticker;
+        icon = '';
+      } else {
+        const sym = MUNDO_SYMBOLS.find(s => s.id === qs.symbol);
+        if (!sym) return res.status(404).json({ error: 'Unknown symbol' });
+        symEncoded = sym.symbol;
+        id = sym.id;
+        name = sym.name;
+        icon = sym.icon;
+      }
+      const range = qs.range || '5d';
+      const interval = range === '1d' ? '5m' : range === '5d' ? '15m' : range === '1mo' ? '1h' : '1d';
+      let points = await fetchYahooChart(symEncoded, interval, range);
+      if (points.length === 0 && range === '1d') {
+        points = await fetchYahooChart(symEncoded, '15m', '5d');
+      }
+      return res.json({ id, name, icon, range, points });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  // Default: all symbols overview
+  try {
+    const fetches = MUNDO_SYMBOLS.map(async (s) => {
+      try {
+        const { price, prevClose, sparkline } = await fetchYahooRaw(s.symbol, '5m', '1d');
+        const spark = sparkline.length < 10 ? await fetchYahooRaw(s.symbol, '15m', '5d') : { price, prevClose, sparkline };
+        const p = spark.price || price;
+        const pc = spark.prevClose || prevClose;
+        const change = pc ? Math.round(((p - pc) / pc) * 10000) / 100 : 0;
+        return { ...s, price: p, prevClose: pc, change, sparkline: spark.sparkline || sparkline };
+      } catch {
+        return { ...s, price: null, prevClose: null, change: null, sparkline: [], error: true };
+      }
+    });
+    const data = await Promise.all(fetches);
+    res.json({ data, updated: new Date().toISOString() });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- News (Google News RSS) ---
+
+app.get('/api/news', async (req, res) => {
+  try {
+    const feedUrl = 'https://news.google.com/rss/search?q=when:3h+mercados+OR+dolar+OR+bolsa+OR+wall+street+OR+bitcoin+OR+acciones+OR+bonos&hl=es-419&gl=AR&ceid=AR:es-419';
+    const { URL } = require('url');
+    const parsed = new URL(feedUrl);
+    const xml = await new Promise((resolve) => {
+      const req2 = require('https').get({
+        hostname: parsed.hostname,
+        path: parsed.pathname + parsed.search,
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        timeout: 8000,
+      }, (r) => {
+        let data = '';
+        r.on('data', d => data += d);
+        r.on('end', () => resolve(data));
+      });
+      req2.on('error', () => resolve(''));
+      req2.on('timeout', () => { req2.destroy(); resolve(''); });
+    });
+
+    const items = [];
+    const regex = /<item>([\s\S]*?)<\/item>/g;
+    let match;
+    while ((match = regex.exec(xml)) !== null) {
+      const block = match[1];
+      const title = (block.match(/<title>([\s\S]*?)<\/title>/) || [])[1] || '';
+      const link = (block.match(/<link>([\s\S]*?)<\/link>/) || [])[1] || '';
+      const pubDate = (block.match(/<pubDate>([\s\S]*?)<\/pubDate>/) || [])[1] || '';
+      const source = (block.match(/<source[^>]*>([\s\S]*?)<\/source>/) || [])[1] || '';
+      const cleanTitle = title
+        .replace(/<!\[CDATA\[|\]\]>/g, '')
+        .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+        .replace(/ - [^-]+$/, '');
+      if (cleanTitle) {
+        items.push({
+          title: cleanTitle.trim(),
+          source: source.replace(/<!\[CDATA\[|\]\]>/g, '').trim(),
+          link: link.trim(),
+          date: pubDate.trim(),
+        });
+      }
+    }
+    res.json({ data: items.slice(0, 20), updated: new Date().toISOString() });
+  } catch (err) {
+    console.error('News proxy error:', err.message);
+    res.status(502).json({ error: 'Failed to fetch news' });
   }
 });
 
