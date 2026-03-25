@@ -1,8 +1,11 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const fetch = require('node-fetch');
 
 const app = express();
+// Make fetch available globally
+global.fetch = fetch;
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const CONFIG_PATH = path.join(__dirname, 'public', 'config.json');
 

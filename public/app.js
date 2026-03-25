@@ -2219,35 +2219,36 @@ function renderONsTable(container, items) {
 }
 
 function renderONsYieldCurve(items) {
-  const canvas = document.getElementById('ons-scatter');
-  if (!canvas) return;
-  if (onsChart) onsChart.destroy();
-  const textColor = '#555555';
-  const gridColor = '#1a1a1a';
-  const points = items.map(i => ({ x: i.duration, y: i.ytm, label: i.d912Ticker }));
-  const curvePoints = points.length >= 3 ? fitPolyCurve(points.map(p => [p.x, p.y]), 2, 200) : [];
-  const datasets = [{
-    label: 'ONs', data: points, backgroundColor: '#00d26a', borderColor: '#00d26a',
-    pointRadius: 5, pointHoverRadius: 7, showLine: false,
-  }];
-  if (curvePoints.length > 0) {
-    datasets.push({
-      label: 'Curva', data: curvePoints, borderColor: '#ff9500', borderWidth: 1.5,
-      borderDash: [4, 3], pointRadius: 0, showLine: true, tension: 0, fill: false,
-    });
-  }
-  onsChart = new Chart(canvas, {
-    type: 'scatter', data: { datasets },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1a1a1a', titleColor: '#ff9500', bodyColor: '#e0e0e0', borderColor: '#333', borderWidth: 1, callbacks: { label: ctx => { const p = ctx.raw; return p.label ? `${p.label}: ${p.y.toFixed(2)}%` : `${p.y.toFixed(2)}%`; } } } },
-      scales: {
-        x: { type: 'linear', title: { display: true, text: 'Duration (años)', color: textColor }, grid: { color: gridColor }, ticks: { color: textColor } },
-        y: { type: 'linear', title: { display: true, text: 'TIR (%)', color: textColor }, grid: { color: gridColor }, ticks: { color: textColor, callback: v => v.toFixed(1) + '%' } }
-      }
-    }
-  });
-}
+   const canvas = document.getElementById('ons-scatter');
+   if (!canvas) return;
+   if (onsChart) onsChart.destroy();
+   const textColor = '#555555';
+   const gridColor = '#1a1a1a';
+   const points = items.map(i => ({ x: i.duration, y: i.ytm, label: i.d912Ticker }));
+   const curvePoints = points.length >= 3 ? fitPolyCurve(points.map(p => [p.x, p.y]), 2, 200) : [];
+   const datasets = [];
+   if (curvePoints.length > 0) {
+     datasets.push({
+       label: 'Curva ONs', data: curvePoints, borderColor: '#ff9500', borderWidth: 1.5,
+       borderDash: [4, 3], pointRadius: 0, showLine: true, tension: 0, fill: false,
+     });
+   }
+   datasets.push({
+     label: 'ONs', data: points, backgroundColor: '#00d26a', borderColor: '#00d26a',
+     pointRadius: 5, pointHoverRadius: 7, showLine: false,
+   });
+   onsChart = new Chart(canvas, {
+     type: 'scatter', data: { datasets },
+     options: {
+       responsive: true, maintainAspectRatio: false,
+       plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1a1a1a', titleColor: '#ff9500', bodyColor: '#e0e0e0', borderColor: '#333', borderWidth: 1, callbacks: { label: ctx => { const p = ctx.raw; return p.label ? `${p.label}: ${p.y.toFixed(2)}%` : `${p.y.toFixed(2)}%`; } } } },
+       scales: {
+         x: { type: 'linear', title: { display: true, text: 'Duration (años)', color: textColor }, grid: { color: gridColor }, ticks: { color: textColor } },
+         y: { type: 'linear', title: { display: true, text: 'TIR (%)', color: textColor }, grid: { color: gridColor }, ticks: { color: textColor, callback: v => v.toFixed(1) + '%' } }
+       }
+     }
+   });
+ }
 
 function openONCalculator(item) {
   document.querySelector('.mundo-modal-overlay')?.remove();
