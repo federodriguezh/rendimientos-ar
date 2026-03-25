@@ -1159,6 +1159,19 @@ function calcYTM(price, flows, settlementDate) {
   return r * 100; // return as percentage
 }
 
+// Price from target TIR (inverse of calcYTM)
+function calcPriceFromYTM(targetYTMpct, flows, settlementDate) {
+  const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000;
+  const r = targetYTMpct / 100;
+  let pv = 0;
+  for (const f of flows) {
+    const t = (f.fecha - settlementDate) / MS_PER_YEAR;
+    if (t <= 0) continue;
+    pv += f.monto / Math.pow(1 + r, t);
+  }
+  return pv;
+}
+
 // Macaulay duration
 function calcDuration(price, flows, settlementDate, ytmPct) {
   const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000;
@@ -1247,12 +1260,18 @@ function openSoberanoCalculator(item) {
           <div><label style="font-size:0.8rem;color:var(--text-secondary)">Duration</label>
             <div id="sob-calc-duration" style="font-size:1.2rem;font-weight:600;color:var(--text)">${item.duration.toFixed(2)} años</div></div>
         </div>
-        <div style="display:flex;gap:16px;align-items:center;margin-bottom:16px;flex-wrap:wrap;padding:8px 12px;background:var(--bg-subtle);border-radius:6px">
+        <div style="display:flex;gap:16px;align-items:center;margin-bottom:16px;flex-wrap:wrap;padding:8px 12px;background:var(--bg-subtle);border-radius:2px">
           <span style="font-size:0.75rem;color:var(--text-secondary);font-weight:600">Costos:</span>
           <div style="display:flex;align-items:center;gap:4px"><label style="font-size:0.75rem;color:var(--text-secondary)">Arancel %</label>
             <input type="number" id="sob-calc-arancel" value="0.45" step="0.01" style="width:70px;padding:4px 6px;font-size:0.85rem;font-weight:600;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)"></div>
           <div style="display:flex;align-items:center;gap:4px"><label style="font-size:0.75rem;color:var(--text-secondary)">Impuestos %</label>
             <input type="number" id="sob-calc-impuestos" value="0.01" step="0.01" style="width:70px;padding:4px 6px;font-size:0.85rem;font-weight:600;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)"></div>
+        </div>
+        <div style="display:flex;gap:16px;align-items:center;margin-bottom:16px;flex-wrap:wrap;padding:10px 12px;background:#0a1628;border:1px solid #1a3050;border-radius:2px">
+          <span style="font-size:0.75rem;color:var(--blue);font-weight:700">TIR Objetivo:</span>
+          <div style="display:flex;align-items:center;gap:4px"><label style="font-size:0.75rem;color:var(--text-secondary)">TIR %</label>
+            <input type="number" id="sob-calc-target-tir" value="" placeholder="${item.ytm.toFixed(1)}" step="0.1" style="width:80px;padding:4px 6px;font-size:0.85rem;font-weight:600;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)"></div>
+          <div id="sob-calc-target-result" style="font-size:0.8rem;color:var(--text-secondary)">Ingresá una TIR para ver el precio implícito</div>
         </div>
         <div id="sob-calc-flows"></div>
       </div>
@@ -1317,11 +1336,24 @@ function openSoberanoCalculator(item) {
     if (isFinite(newDur)) { durDisplay.textContent = newDur.toFixed(2) + ' años'; }
     renderSobFlows();
   }
-  priceInput.addEventListener('input', recalcSob);
+  const targetTirInput = document.getElementById('sob-calc-target-tir');
+  const targetResult = document.getElementById('sob-calc-target-result');
+  function recalcTargetTir() {
+    const targetTir = parseFloat(targetTirInput.value);
+    if (!targetTir && targetTir !== 0) { targetResult.innerHTML = 'Ingresá una TIR para ver el precio implícito'; return; }
+    const today = new Date();
+    const impliedPrice = calcPriceFromYTM(targetTir, item.flujos, today);
+    const currentPrice = parseFloat(priceInput.value) || item.priceUsd;
+    const upside = ((impliedPrice - currentPrice) / currentPrice * 100);
+    const upsideColor = upside >= 0 ? 'var(--green)' : 'var(--red)';
+    targetResult.innerHTML = `Precio: <strong style="color:var(--accent)">US$${impliedPrice.toFixed(2)}</strong> &nbsp;|&nbsp; Upside: <strong style="color:${upsideColor}">${upside >= 0 ? '+' : ''}${upside.toFixed(1)}%</strong> vs actual`;
+  }
+  targetTirInput.addEventListener('input', recalcTargetTir);
+  priceInput.addEventListener('input', () => { recalcSob(); recalcTargetTir(); });
   montoInput.addEventListener('input', renderSobFlows);
   arancelInput.addEventListener('input', recalcSob);
   impuestosInput.addEventListener('input', recalcSob);
-  recalcSob(); // initial calc with costs
+  recalcSob();
 }
 
 let soberanosChart = null;
@@ -1899,6 +1931,12 @@ function openCERCalculator(item) {
           <div style="display:flex;align-items:center;gap:4px"><label style="font-size:0.75rem;color:var(--text-secondary)">Impuestos %</label>
             <input type="number" id="cer-calc-impuestos" value="0.01" step="0.01" style="width:70px;padding:4px 6px;font-size:0.85rem;font-weight:600;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)"></div>
         </div>
+        <div style="display:flex;gap:16px;align-items:center;margin-bottom:16px;flex-wrap:wrap;padding:10px 12px;background:#0a1628;border:1px solid #1a3050;border-radius:2px">
+          <span style="font-size:0.75rem;color:var(--blue);font-weight:700">TIR Objetivo:</span>
+          <div style="display:flex;align-items:center;gap:4px"><label style="font-size:0.75rem;color:var(--text-secondary)">TIR %</label>
+            <input type="number" id="cer-calc-target-tir" value="" placeholder="${item.ytm.toFixed(1)}" step="0.1" style="width:80px;padding:4px 6px;font-size:0.85rem;font-weight:600;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)"></div>
+          <div id="cer-calc-target-result" style="font-size:0.8rem;color:var(--text-secondary)">Ingresá una TIR para ver el precio implícito</div>
+        </div>
         <div id="cer-calc-resumen"></div>
       </div>
     </div>`;
@@ -1945,7 +1983,21 @@ function openCERCalculator(item) {
         </table></div>` : '<p style="font-size:0.8rem;color:var(--text-tertiary)">Nota: Los flujos futuros dependen de la evolución del CER (inflación).</p>'}`;
   }
   renderCERResumen();
-  document.getElementById('cer-calc-price').addEventListener('input', renderCERResumen);
+  const cerTargetInput = document.getElementById('cer-calc-target-tir');
+  const cerTargetResult = document.getElementById('cer-calc-target-result');
+  function recalcCERTarget() {
+    const targetTir = parseFloat(cerTargetInput.value);
+    if (!targetTir && targetTir !== 0) { cerTargetResult.innerHTML = 'Ingresá una TIR para ver el precio implícito'; return; }
+    const today = new Date();
+    const flows = item.flujosAjustados || item.flujos || [];
+    const impliedPrice = calcPriceFromYTM(targetTir, flows, today);
+    const currentPrice = parseFloat(document.getElementById('cer-calc-price').value) || item.priceArs;
+    const upside = ((impliedPrice - currentPrice) / currentPrice * 100);
+    const upsideColor = upside >= 0 ? 'var(--green)' : 'var(--red)';
+    cerTargetResult.innerHTML = `Precio: <strong style="color:var(--accent)">$${impliedPrice.toFixed(2)}</strong> &nbsp;|&nbsp; Upside: <strong style="color:${upsideColor}">${upside >= 0 ? '+' : ''}${upside.toFixed(1)}%</strong> vs actual`;
+  }
+  cerTargetInput.addEventListener('input', recalcCERTarget);
+  document.getElementById('cer-calc-price').addEventListener('input', () => { renderCERResumen(); recalcCERTarget(); });
   document.getElementById('cer-calc-monto').addEventListener('input', renderCERResumen);
   document.getElementById('cer-calc-arancel').addEventListener('input', renderCERResumen);
   document.getElementById('cer-calc-impuestos').addEventListener('input', renderCERResumen);
@@ -2154,6 +2206,12 @@ function openONCalculator(item) {
           <div style="display:flex;align-items:center;gap:4px"><label style="font-size:0.75rem;color:var(--text-secondary)">Impuestos %</label>
             <input type="number" id="on-calc-impuestos" value="0.01" step="0.01" style="width:70px;padding:4px 6px;font-size:0.85rem;font-weight:600;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)"></div>
         </div>
+        <div style="display:flex;gap:16px;align-items:center;margin-bottom:16px;flex-wrap:wrap;padding:10px 12px;background:#0a1628;border:1px solid #1a3050;border-radius:2px">
+          <span style="font-size:0.75rem;color:var(--blue);font-weight:700">TIR Objetivo:</span>
+          <div style="display:flex;align-items:center;gap:4px"><label style="font-size:0.75rem;color:var(--text-secondary)">TIR %</label>
+            <input type="number" id="on-calc-target-tir" value="" placeholder="${item.ytm.toFixed(1)}" step="0.1" style="width:80px;padding:4px 6px;font-size:0.85rem;font-weight:600;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)"></div>
+          <div id="on-calc-target-result" style="font-size:0.8rem;color:var(--text-secondary)">Ingresá una TIR para ver el precio implícito</div>
+        </div>
         <h4 style="margin:12px 0 8px;font-size:0.85rem;color:var(--text-secondary)">Flujos de fondos</h4>
         <div id="on-calc-flows"></div>
       </div>
@@ -2218,11 +2276,25 @@ function openONCalculator(item) {
     if (isFinite(newDur)) { durDisplay.textContent = newDur.toFixed(2) + ' años'; }
     renderONFlows();
   }
-  priceInput.addEventListener('input', recalc);
+  const onTargetInput = document.getElementById('on-calc-target-tir');
+  const onTargetResult = document.getElementById('on-calc-target-result');
+  function recalcONTarget() {
+    const targetTir = parseFloat(onTargetInput.value);
+    if (!targetTir && targetTir !== 0) { onTargetResult.innerHTML = 'Ingresá una TIR para ver el precio implícito'; return; }
+    const today = new Date();
+    const impliedPricePer1 = calcPriceFromYTM(targetTir, item.flujos, today);
+    const impliedPrice = impliedPricePer1 * 100; // ONs: price per 100 VN
+    const currentPrice = parseFloat(priceInput.value) || item.priceUSD;
+    const upside = ((impliedPrice - currentPrice) / currentPrice * 100);
+    const upsideColor = upside >= 0 ? 'var(--green)' : 'var(--red)';
+    onTargetResult.innerHTML = `Precio: <strong style="color:var(--accent)">US$${impliedPrice.toFixed(2)}</strong> &nbsp;|&nbsp; Upside: <strong style="color:${upsideColor}">${upside >= 0 ? '+' : ''}${upside.toFixed(1)}%</strong> vs actual`;
+  }
+  onTargetInput.addEventListener('input', recalcONTarget);
+  priceInput.addEventListener('input', () => { recalc(); recalcONTarget(); });
   montoInput.addEventListener('input', renderONFlows);
   arancelInput.addEventListener('input', recalc);
   impuestosInput.addEventListener('input', recalc);
-  recalc(); // initial calc with costs
+  recalc();
 }
 
 // ─── Generic sortable table ───
@@ -2290,6 +2362,12 @@ function openLecapCalculator(item) {
           <div style="display:flex;align-items:center;gap:4px"><label style="font-size:0.75rem;color:var(--text-secondary)">Impuestos %</label>
             <input type="number" id="lecap-calc-impuestos" value="0.01" step="0.01" style="width:70px;padding:4px 6px;font-size:0.85rem;font-weight:600;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)"></div>
         </div>
+        <div style="display:flex;gap:16px;align-items:center;margin-bottom:16px;flex-wrap:wrap;padding:10px 12px;background:#0a1628;border:1px solid #1a3050;border-radius:2px">
+          <span style="font-size:0.75rem;color:var(--blue);font-weight:700">TIR Objetivo:</span>
+          <div style="display:flex;align-items:center;gap:4px"><label style="font-size:0.75rem;color:var(--text-secondary)">TIR %</label>
+            <input type="number" id="lecap-calc-target-tir" value="" placeholder="${item.tir.toFixed(1)}" step="0.1" style="width:80px;padding:4px 6px;font-size:0.85rem;font-weight:600;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)"></div>
+          <div id="lecap-calc-target-result" style="font-size:0.8rem;color:var(--text-secondary)">Ingresá una TIR para ver el precio implícito</div>
+        </div>
         <div id="lecap-calc-resumen"></div>
       </div>
     </div>`;
@@ -2333,11 +2411,23 @@ function openLecapCalculator(item) {
     tirEl.style.color = tir >= 0 ? 'var(--green)' : 'var(--red)';
     renderLecapResumen();
   }
-  document.getElementById('lecap-calc-price').addEventListener('input', recalcLecap);
+  const lecapTargetInput = document.getElementById('lecap-calc-target-tir');
+  const lecapTargetResult = document.getElementById('lecap-calc-target-result');
+  function recalcLecapTarget() {
+    const targetTir = parseFloat(lecapTargetInput.value);
+    if (!targetTir && targetTir !== 0) { lecapTargetResult.innerHTML = 'Ingresá una TIR para ver el precio implícito'; return; }
+    const impliedPrice = item.pago_final / Math.pow(1 + targetTir / 100, item.dias / 365);
+    const currentPrice = parseFloat(document.getElementById('lecap-calc-price').value) || item.precio;
+    const upside = ((impliedPrice - currentPrice) / currentPrice * 100);
+    const upsideColor = upside >= 0 ? 'var(--green)' : 'var(--red)';
+    lecapTargetResult.innerHTML = `Precio: <strong style="color:var(--accent)">$${impliedPrice.toFixed(2)}</strong> &nbsp;|&nbsp; Upside: <strong style="color:${upsideColor}">${upside >= 0 ? '+' : ''}${upside.toFixed(1)}%</strong> vs actual`;
+  }
+  lecapTargetInput.addEventListener('input', recalcLecapTarget);
+  document.getElementById('lecap-calc-price').addEventListener('input', () => { recalcLecap(); recalcLecapTarget(); });
   document.getElementById('lecap-calc-monto').addEventListener('input', renderLecapResumen);
   document.getElementById('lecap-calc-arancel').addEventListener('input', recalcLecap);
   document.getElementById('lecap-calc-impuestos').addEventListener('input', recalcLecap);
-  recalcLecap(); // initial calc with costs
+  recalcLecap();
 }
 
 // ─── PORTFOLIO MODULE ───
