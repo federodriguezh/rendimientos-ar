@@ -8,9 +8,7 @@ Rendimientos AR - Sitio para comparar rendimientos de productos financieros en A
 
 - **Frontend**: Vanilla JS + CSS (no framework), Chart.js para graficos
 - **Backend**: Express.js (local dev), Netlify Functions (prod)
-- **Auth + DB**: Supabase (Google OAuth, PostgreSQL con RLS)
 - **Datos**: ArgentinaDatos API (FCIs, Plazo Fijo), data912 (LECAPs, Bonos, ONs), Yahoo Finance (Monitor Global), Google News RSS
-- **Analytics**: Supabase (tabla `page_views`)
 - **Deploy**: Netlify (`npx netlify deploy --prod`)
 - **Dominio**: rendimientos.co (canonical), rendimientos-ar.netlify.app (legacy)
 
@@ -21,7 +19,7 @@ Rendimientos AR - Sitio para comparar rendimientos de productos financieros en A
 - `public/config.json` - Config estatica (billeteras, LECAPs, flujos bonos)
 - `public/styles.css` - Estilos + dark mode con CSS variables
 - `server.js` - Server Express para dev local
-- `netlify/functions/` - Funciones serverless (proxies de APIs + auth-config)
+- `netlify/functions/` - Funciones serverless (proxies de APIs)
 
 ### Funciones Netlify
 
@@ -32,13 +30,13 @@ Rendimientos AR - Sitio para comparar rendimientos de productos financieros en A
 - `ons.js` - Obligaciones Negociables via data912
 - `mundo.js` - Monitor global via Yahoo Finance
 - `news.js` - Noticias financieras via Google News RSS
-- `auth-config.js` - Devuelve Supabase URL + anon key desde env vars
 
-### Supabase (DB)
+### Portfolio (localStorage)
 
-- **Tabla `holdings`**: Portfolio del usuario (asset_type, ticker, quantity, purchase_price, purchase_date, metadata JSONB). RLS por user_id.
-- **Tabla `page_views`**: Analytics de visitas (path, referrer, timestamp). Insert publico, select restringido.
-- **Auth**: Google OAuth via PKCE flow.
+- **Storage key `holdings`**: Portfolio en localStorage como JSON array
+- Cada holding: `{ id, asset_type, ticker, quantity, purchase_price, purchase_date, metadata }`
+- `metadata.operations` trackea operaciones buy/sell para PPP (precio promedio ponderado)
+- Sin autenticacion — datos locales al browser
 
 ## Desarrollo local
 
@@ -49,11 +47,9 @@ npm install && npm start  # http://localhost:3000
 Variables de entorno necesarias (`.env`):
 ```
 PORT=3000
-SUPABASE_URL=https://xxx.supabase.co
-SUPABASE_ANON_KEY=eyJ...
 ```
 
-Nota: Las Netlify functions (mundo, soberanos, news, etc) solo funcionan en produccion. El server local sirve FCIs, config y auth-config.
+Nota: Las Netlify functions (mundo, soberanos, news, etc) solo funcionan en produccion. El server local sirve FCIs, config y endpoints de acciones/CEDEARs.
 
 ## Reglas
 
@@ -63,7 +59,7 @@ Nota: Las Netlify functions (mundo, soberanos, news, etc) solo funcionan en prod
 - Los datos de billeteras/cuentas remuneradas son manuales en config.json
 - El SEO usa el dominio `rendimientos.co`, no el legacy de Netlify
 - Las calculadoras de bonos incluyen campos de Arancel e Impuestos (editables por el usuario)
-- El portfolio usa Supabase con RLS — cada usuario solo ve sus holdings
+- El portfolio usa localStorage — datos locales al browser del usuario
 - El tipo de cambio implicito (CCL) se calcula desde AL30/AL30D de data912
 
 ## Portfolio

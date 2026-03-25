@@ -64,8 +64,13 @@
   status = 200
 
 [[redirects]]
-  from = "/api/auth-config"
-  to = "/.netlify/functions/auth-config"
+  from = "/api/acciones"
+  to = "/.netlify/functions/acciones"
+  status = 200
+
+[[redirects]]
+  from = "/api/cedears"
+  to = "/.netlify/functions/cedears"
   status = 200
 
 [[redirects]]

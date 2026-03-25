@@ -4248,5 +4248,15 @@
         }
       ]
     }
-  }
+  },
+  "acciones": [
+    "AGRO", "ALUA", "AUSO", "BBAR", "BHIP", "BMA", "BOLT", "BPAT", "BYMA",
+    "CADO", "CAPX", "CARC", "CECO2", "CELU", "CEPU", "CGPA2", "COME", "CRES",
+    "CTIO", "CVH", "DGCU2", "ECOG", "EDN", "EDSH", "FERR", "FIPL", "GAMI",
+    "GARO", "GBAN", "GCDI", "GCLA", "GGAL", "GRIM", "HARG", "HAVA", "HSAT",
+    "IEB", "INTR", "INVJ", "IRSA", "LEDE", "LOMA", "LONG", "METR", "MIRG",
+    "MOLA", "MOLI", "MORI", "OEST", "PAMP", "PATA", "RAGH", "RICH", "RIGO",
+    "ROSE", "SAMI", "SEMI", "SUPV", "TECO2", "TGNO4", "TGSU2", "TRAN", "TXAR",
+    "VALO", "YPFD"
+  ]
 }

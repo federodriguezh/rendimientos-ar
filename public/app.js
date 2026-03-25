@@ -1,90 +1,4 @@
-// ─── Supabase Auth ───
-let supabaseClient = null;
-let currentUser = null;
 let _portfolioConfig = null; // cached config for portfolio use
-
-async function initSupabase() {
-  try {
-    const resp = await fetch('/api/auth-config');
-    const { url, anonKey } = await resp.json();
-    if (!url || !anonKey) return;
-    supabaseClient = window.supabase.createClient(url, anonKey, {
-      auth: { flowType: 'pkce' }
-    });
-
-    // Handle PKCE OAuth callback (code in query params)
-    const params = new URLSearchParams(location.search);
-    if (params.has('code')) {
-      const { data: { session }, error } = await supabaseClient.auth.exchangeCodeForSession(params.get('code'));
-      if (session) {
-        currentUser = session.user;
-        updateAuthUI();
-        history.replaceState(null, '', location.pathname + '#portfolio');
-        if (window._switchToPortfolio) window._switchToPortfolio();
-        // Ensure portfolio loads after OAuth redirect
-        setTimeout(() => loadPortfolio(), 100);
-        return;
-      }
-    }
-
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    if (session) {
-      currentUser = session.user;
-      updateAuthUI(); // handles portfolio-login-prompt / portfolio-content visibility
-      // If user is on portfolio tab, load holdings now that we have the session
-      if (location.hash === '#portfolio') loadPortfolio();
-    }
-
-    supabaseClient.auth.onAuthStateChange((event, session) => {
-      currentUser = session?.user || null;
-      updateAuthUI();
-    });
-
-    // Track page view (fire and forget, once per session)
-    if (!sessionStorage.getItem('pv_tracked')) {
-      supabaseClient.from('page_views').insert({
-        path: (location.hash || '/').slice(0, 200),
-        referrer: (document.referrer || '').slice(0, 500) || null,
-      }).catch(() => {});
-      sessionStorage.setItem('pv_tracked', '1');
-    }
-  } catch (e) {
-    console.warn('Supabase init skipped:', e.message);
-  }
-}
-
-async function loginWithGoogle() {
-  if (!supabaseClient) return;
-  await supabaseClient.auth.signInWithOAuth({
-    provider: 'google',
-    options: { redirectTo: window.location.origin + '/#portfolio' }
-  });
-}
-
-async function logout() {
-  if (!supabaseClient) return;
-  await supabaseClient.auth.signOut();
-  currentUser = null;
-  updateAuthUI();
-  if (location.hash === '#portfolio') location.hash = 'mundo';
-}
-
-function updateAuthUI() {
-  const userDiv = document.getElementById('auth-user');
-  const avatar = document.getElementById('auth-avatar');
-  const portfolioLoginPrompt = document.getElementById('portfolio-login-prompt');
-  const portfolioContent = document.getElementById('portfolio-content');
-  if (currentUser) {
-    if (userDiv) userDiv.style.display = 'flex';
-    if (avatar) avatar.src = currentUser.user_metadata?.avatar_url || '';
-    if (portfolioLoginPrompt) portfolioLoginPrompt.style.display = 'none';
-    if (portfolioContent) portfolioContent.style.display = '';
-  } else {
-    if (userDiv) userDiv.style.display = 'none';
-    if (portfolioLoginPrompt) portfolioLoginPrompt.style.display = '';
-    if (portfolioContent) portfolioContent.style.display = 'none';
-  }
-}
 
 document.addEventListener('DOMContentLoaded', () => {
   setupThemeToggle();
@@ -95,11 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadHotMovers();
   loadCotizaciones();
   loadNewsTicker();
-  initSupabase();
 
-  // Auth event listeners
-  document.getElementById('auth-logout-btn')?.addEventListener('click', logout);
-  document.getElementById('portfolio-google-login')?.addEventListener('click', loginWithGoogle);
   document.getElementById('portfolio-add-btn')?.addEventListener('click', openAddHoldingModal);
 });
 
@@ -491,14 +401,7 @@ function setupTabs() {
     hero.querySelector('p').textContent = '';
     hero.style.display = 'none';
     updatePageTitle('portfolio');
-    if (currentUser) {
-      document.getElementById('portfolio-login-prompt').style.display = 'none';
-      document.getElementById('portfolio-content').style.display = '';
-      loadPortfolio();
-    } else {
-      document.getElementById('portfolio-login-prompt').style.display = '';
-      document.getElementById('portfolio-content').style.display = 'none';
-    }
+    loadPortfolio();
   }
 
   function switchToArs() {
@@ -1793,7 +1696,16 @@ async function loadMundoChart(buildUrl, range) {
             const idx = elements[0].index;
             chart._crosshairX = elements[0].element.x;
             updateMundoHeader(mundoDetailPoints, idx);
-          } else {
+    } else if ((type === 'accion' || type === 'cedear') && tickers.length === 0) {
+      select.style.display = 'none';
+      select.insertAdjacentHTML('afterend', '<div id="modal-custom-fields" style="margin-top:12px"><label style="font-size:0.8rem;color:var(--text-secondary)">Ticker</label><input type="text" id="modal-custom-name" value="' + (existing?.ticker || '') + '" placeholder="Ej: GGAL, AAPL" style="display:block;width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:0.95rem;font-weight:600;font-family:var(--font);background:var(--bg);color:var(--text)"></div>');
+      overlay.querySelector('#modal-qty-label').textContent = ASSET_TYPES[type]?.qtyLabel || 'Cantidad';
+      const phFallback = { accion: { hint: '(ARS por acción)', example: 'Precio en ARS por acción. Ej: GGAL a $6.735', placeholder: 'Ej: 6735' }, cedear: { hint: '(ARS por CEDEAR)', example: 'Precio en ARS por CEDEAR. Ej: AAPL a $18.430', placeholder: 'Ej: 18430' } };
+      const phf = phFallback[type] || {};
+      overlay.querySelector('#modal-price-hint').textContent = phf.hint || '';
+      overlay.querySelector('#modal-price-example').textContent = phf.example || '';
+      overlay.querySelector('#modal-price').placeholder = phf.placeholder || '';
+    } else {
             chart._crosshairX = null;
             updateMundoHeader(mundoDetailPoints, null);
           }
@@ -2603,11 +2515,40 @@ function openLecapCalculator(item) {
 
 const MONTH_NAMES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
+// ─── localStorage helpers ───
+function generateId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+function getHoldingsLS() {
+  try { return JSON.parse(localStorage.getItem('holdings') || '[]'); }
+  catch { return []; }
+}
+function saveHoldingsLS(holdings) {
+  localStorage.setItem('holdings', JSON.stringify(holdings));
+}
+function saveHoldingLS(holding) {
+  const all = getHoldingsLS();
+  const idx = all.findIndex(h => h.id === holding.id);
+  if (idx >= 0) all[idx] = { ...all[idx], ...holding };
+  else all.push(holding);
+  saveHoldingsLS(all);
+}
+function updateHoldingLS(id, updates) {
+  const all = getHoldingsLS();
+  const idx = all.findIndex(h => h.id === id);
+  if (idx >= 0) { all[idx] = { ...all[idx], ...updates }; saveHoldingsLS(all); }
+}
+function deleteHoldingLS(id) {
+  saveHoldingsLS(getHoldingsLS().filter(h => h.id !== id));
+}
+
 const ASSET_TYPES = {
   soberano: { label: 'Soberanos', emoji: '🏛️', currency: 'USD', qtyLabel: 'Valor Nominal (VN)' },
   on: { label: 'ONs', emoji: '🏢', currency: 'USD', qtyLabel: 'Valor Nominal (VN)' },
   cer: { label: 'Bonos CER', emoji: '📊', currency: 'ARS', qtyLabel: 'Valor Nominal (VN)' },
   lecap: { label: 'LECAPs', emoji: '📈', currency: 'ARS', qtyLabel: 'Valor Nominal (VN)' },
+  accion: { label: 'Acciones AR', emoji: '📈', currency: 'ARS', qtyLabel: 'Cantidad' },
+  cedear: { label: 'CEDEARs', emoji: '🌎', currency: 'ARS', qtyLabel: 'Cantidad' },
   fci: { label: 'FCIs', emoji: '💰', currency: 'ARS', qtyLabel: 'Cuotapartes' },
   garantizado: { label: 'Billeteras', emoji: '🏦', currency: 'ARS', qtyLabel: 'Monto (ARS)' },
   cash: { label: 'Cash', emoji: '💵', currency: 'USD', qtyLabel: 'Monto' },
@@ -2658,13 +2599,8 @@ async function addOperationToHolding(holdingId, operation) {
   const { ppp, netQty } = computePosition(ops);
 
   const newMeta = { ...(holding.metadata || {}), operations: ops };
-  const { error } = await supabaseClient.from('holdings').update({
-    quantity: netQty,
-    purchase_price: ppp,
-    metadata: newMeta,
-  }).eq('id', holdingId);
+  updateHoldingLS(holdingId, { quantity: netQty, purchase_price: ppp, metadata: newMeta });
 
-  if (error) return { error: error.message };
   return { ok: true };
 }
 
@@ -2687,6 +2623,8 @@ function getTickersForType(config, type) {
     case 'on': return Object.keys(config.ons || {});
     case 'cer': return Object.keys(config.bonos_cer || {});
     case 'lecap': return (config.lecaps?.letras || []).filter(l => l.activo).map(l => l.ticker);
+    case 'accion': return config.acciones || [];
+    case 'cedear': return (config.cedears_ratios || []).map(c => c.ticker) || [];
     case 'fci': return (config.fcis || []).filter(f => f.activo).map(f => f.nombre);
     case 'garantizado': return [...(config.garantizados || []), ...(config.especiales || [])].filter(g => g.activo).map(g => g.nombre);
     case 'cash': return ['USD', 'ARS'];
@@ -2696,16 +2634,14 @@ function getTickersForType(config, type) {
 }
 
 async function loadPortfolio() {
-  if (!supabaseClient || !currentUser || _portfolioLoading) return;
+  if (_portfolioLoading) return;
   _portfolioLoading = true;
 
   const holdingsEl = document.getElementById('portfolio-holdings');
   holdingsEl.innerHTML = '<div class="loading"><div class="loading-spinner"></div></div>';
 
   try {
-    const { data, error } = await supabaseClient.from('holdings').select('*').order('created_at', { ascending: false });
-    if (error) throw error;
-    _portfolioHoldings = data || [];
+    _portfolioHoldings = getHoldingsLS();
 
     const config = await getPortfolioConfig();
     const [prices, tc] = await Promise.all([
@@ -2756,6 +2692,16 @@ async function fetchPortfolioPrices(holdings, config) {
       for (const b of (d.data || [])) prices['cer:' + b.symbol] = { price: parseFloat(b.c || 0), currency: 'ARS' };
     }).catch(() => {}));
   }
+  if (needs.has('accion')) {
+    fetches.push(fetch('/api/acciones').then(r => r.json()).then(d => {
+      for (const b of (d.data || [])) prices['accion:' + b.symbol] = { price: parseFloat(b.c || 0), currency: 'ARS' };
+    }).catch(() => {}));
+  }
+  if (needs.has('cedear')) {
+    fetches.push(fetch('/api/cedears').then(r => r.json()).then(d => {
+      for (const b of (d.data || [])) prices['cedear:' + b.symbol] = { price: parseFloat(b.c || 0), currency: 'ARS' };
+    }).catch(() => {}));
+  }
   // FCIs and garantizados: use config TNA (no market price per se)
   if (needs.has('garantizado')) {
     const all = [...(config.garantizados || []), ...(config.especiales || [])];
@@ -2785,15 +2731,8 @@ async function fetchTipoCambio() {
 
 function renderPortfolioGreeting() {
   const el = document.getElementById('portfolio-greeting');
-  if (!el || !currentUser) return;
-  const name = (currentUser.user_metadata?.full_name || currentUser.email || '').split(' ')[0];
-  const hour = new Date().getHours();
-  let saludo = 'Buenas noches';
-  if (hour >= 6 && hour < 12) saludo = 'Buenos días';
-  else if (hour >= 12 && hour < 19) saludo = 'Buenas tardes';
-  el.innerHTML = `
-    <h2 style="font-size:1.6rem;margin:0">${saludo}, ${name} 👋</h2>
-    <p style="color:var(--text-tertiary);font-size:0.82rem;margin-top:4px">Gracias por usar rendimientos.co — hecho con mucho ❤️ desde Argentina 🇦🇷. Parece que HTML funciona 😂</p>`;
+  if (!el) return;
+  el.innerHTML = '<h2 style="font-size:1.6rem;margin:0">Mi Portfolio 💼</h2><p style="color:var(--text-tertiary);font-size:0.82rem;margin-top:4px">Gestioná tus inversiones con precios en tiempo real.</p>';
 }
 
 function renderPortfolioTCToggle(config) {
@@ -2839,6 +2778,12 @@ function getHoldingValue(holding, config) {
     // FCIs: qty = cuotapartes, price = NAV per cuotaparte
     // We don't have live NAV per holding easily, just show purchase value
     return { currentPrice: null, value: qty * purchasePrice, pnl: 0, currency: 'ARS' };
+  }
+  if (holding.asset_type === 'accion' || holding.asset_type === 'cedear') {
+    const currentPrice = priceData?.price || 0;
+    const value = currentPrice * qty;
+    const cost = purchasePrice * qty;
+    return { currentPrice, value, cost, pnl: value - cost, currency: 'ARS' };
   }
 
   const currentPrice = priceData?.price || 0;
@@ -3085,6 +3030,8 @@ function openAddHoldingModal(editId) {
         on: { hint: '(USD por 100 VN)', example: 'Precio en USD por cada 100 VN. Ej: BACG a US$102.50', placeholder: 'Ej: 102.50' },
         cer: { hint: '(ARS por 100 VN)', example: 'Precio en ARS por cada 100 VN. Ej: TX26 a $110.25', placeholder: 'Ej: 110.25' },
         lecap: { hint: '(ARS por 100 VN)', example: 'Precio en ARS por cada 100 VN. Ej: S17A6 a $108.40', placeholder: 'Ej: 108.40' },
+        accion: { hint: '(ARS por acción)', example: 'Precio en ARS por acción. Ej: GGAL a $6.735', placeholder: 'Ej: 6735' },
+        cedear: { hint: '(ARS por CEDEAR)', example: 'Precio en ARS por CEDEAR. Ej: AAPL a $18.430', placeholder: 'Ej: 18430' },
         fci: { hint: '(por cuotaparte)', example: 'Valor de la cuotaparte al momento de compra', placeholder: 'Ej: 5250.00' },
         garantizado: { hint: '(no aplica)', example: 'Para billeteras no se usa precio de compra, poné 1', placeholder: '1' },
       };
@@ -3115,6 +3062,9 @@ function openAddHoldingModal(editId) {
       const curr = overlay.querySelector('#modal-custom-currency')?.value || 'USD';
       const curPrice = parseFloat(overlay.querySelector('#modal-custom-current-price')?.value) || 0;
       metadata = { currency: curr, current_price: curPrice || null };
+    }
+    if ((selectedType === 'accion' || selectedType === 'cedear') && overlay.querySelector('#modal-custom-name')) {
+      ticker = overlay.querySelector('#modal-custom-name')?.value?.trim() || '';
     }
 
     if (!selectedType || !ticker || !qty || !date) {
@@ -3167,7 +3117,7 @@ function openAddHoldingModal(editId) {
     metadata.operations = [initialOp];
 
     const record = {
-      user_id: currentUser.id,
+      id: editId || generateId(),
       asset_type: selectedType,
       ticker,
       quantity: qty,
@@ -3177,13 +3127,7 @@ function openAddHoldingModal(editId) {
     };
 
     try {
-      if (isEdit) {
-        const { error } = await supabaseClient.from('holdings').update(record).eq('id', editId);
-        if (error) throw error;
-      } else {
-        const { error } = await supabaseClient.from('holdings').insert(record);
-        if (error) throw error;
-      }
+      saveHoldingLS(record);
       overlay.remove();
       loadPortfolio();
     } catch (e) {
@@ -3305,14 +3249,10 @@ function openOperationsModal(holdingId) {
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
 }
 
-async function deleteHolding(id) {
+function deleteHolding(id) {
   if (!confirm('¿Eliminar este activo del portfolio?')) return;
-  try {
-    await supabaseClient.from('holdings').delete().eq('id', id);
-    loadPortfolio();
-  } catch (e) {
-    alert('Error eliminando: ' + e.message);
-  }
+  deleteHoldingLS(id);
+  loadPortfolio();
 }
 
 // ─── Cash Flow Calendar ───

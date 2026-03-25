@@ -22,22 +22,14 @@ app.use((req, res, next) => {
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
       "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
-      "connect-src 'self' https://api.argentinadatos.com https://data912.com https://api.bcra.gob.ar https://*.supabase.co",
-      "frame-src https://*.supabase.co",
+      "connect-src 'self' https://api.argentinadatos.com https://data912.com https://api.bcra.gob.ar",
+      "frame-src 'none'",
       "object-src 'none'",
     ].join('; ')
   );
   next();
 });
 app.use(express.static(path.join(__dirname, 'public')));
-
-// --- Auth Config API ---
-app.get('/api/auth-config', (req, res) => {
-  res.json({
-    url: process.env.SUPABASE_URL || '',
-    anonKey: process.env.SUPABASE_ANON_KEY || '',
-  });
-});
 
 // --- Config API ---
 
@@ -270,6 +262,38 @@ app.get('/api/cer-precios', async (req, res) => {
   } catch (err) {
     console.error('CER prices proxy error:', err.message);
     res.status(502).json({ error: 'Failed to fetch CER bond prices' });
+  }
+});
+
+// --- Acciones Argentinas (via data912) ---
+
+app.get('/api/acciones', async (req, res) => {
+  try {
+    const response = await fetch('https://data912.com/live/arg_stocks');
+    const data = await response.json();
+
+    const stocks = (Array.isArray(data) ? data : []).filter(s => !s.symbol.endsWith('D') && !s.symbol.endsWith('.D'));
+
+    res.json({ data: stocks, source: 'data912' });
+  } catch (err) {
+    console.error('Acciones proxy error:', err.message);
+    res.status(502).json({ error: 'Failed to fetch stock prices' });
+  }
+});
+
+// --- CEDEARs (via data912) ---
+
+app.get('/api/cedears', async (req, res) => {
+  try {
+    const response = await fetch('https://data912.com/live/arg_cedears');
+    const data = await response.json();
+
+    const cedears = (Array.isArray(data) ? data : []).filter(s => !s.symbol.endsWith('D') && !s.symbol.endsWith('C'));
+
+    res.json({ data: cedears, source: 'data912' });
+  } catch (err) {
+    console.error('CEDEARs proxy error:', err.message);
+    res.status(502).json({ error: 'Failed to fetch CEDEAR prices' });
   }
 });
 

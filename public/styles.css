@@ -603,52 +603,7 @@ body {
   border-color: var(--text);
 }
 
-/* Auth Area */
-.auth-area {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-.auth-user {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.auth-avatar {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  border: 2px solid var(--border);
-}
-.auth-logout-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 0.65rem;
-  font-weight: 600;
-  color: var(--text-tertiary);
-  font-family: var(--font);
-  padding: 2px 4px;
-}
-.auth-logout-btn:hover { color: var(--red); }
-
 /* Portfolio */
-.portfolio-google-btn {
-  display: inline-flex;
-  align-items: center;
-  background: var(--card-bg);
-  border: 1px solid var(--accent);
-  border-radius: 2px;
-  padding: 10px 24px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text);
-  cursor: pointer;
-  font-family: var(--font);
-  transition: all 0.15s;
-}
-.portfolio-google-btn:hover { background: var(--accent-light); border-color: var(--accent-dark); }
 .portfolio-add-btn {
   background: var(--accent);
   color: #000;
@@ -1617,8 +1572,6 @@ body {
   .currency-tabs { flex-shrink: 0; gap: 0; padding: 2px; }
   .currency-tab { padding: 4px 8px; font-size: 0.65rem; width: auto; min-width: 0; }
   .currency-tab .flag { display: none; }
-  .auth-area { display: none; }
-  .auth-login-btn { font-size: 0.6rem; padding: 3px 6px; }
   .admin-link { display: none; }
   .portfolio-type-grid { grid-template-columns: repeat(2, 1fr); }
   .portfolio-summary-grid { grid-template-columns: repeat(2, 1fr); }
