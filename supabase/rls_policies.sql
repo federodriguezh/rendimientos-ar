@@ -56,7 +56,7 @@ ALTER TABLE public.holdings
 ALTER TABLE public.holdings
   DROP CONSTRAINT IF EXISTS holdings_quantity_positive;
 ALTER TABLE public.holdings
-  ADD CONSTRAINT holdings_quantity_positive CHECK (quantity > 0);
+  ADD CONSTRAINT holdings_quantity_positive CHECK (quantity >= 0);
 
 ALTER TABLE public.holdings
   DROP CONSTRAINT IF EXISTS holdings_price_non_negative;

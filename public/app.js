@@ -2442,6 +2442,60 @@ const ASSET_TYPES = {
   custom: { label: 'Otro', emoji: '⭐', currency: 'USD', qtyLabel: 'Cantidad' },
 };
 
+// ─── PPP & Operations helpers ───
+function getOperationsFromHolding(holding) {
+  if (Array.isArray(holding.metadata?.operations) && holding.metadata.operations.length > 0) {
+    return holding.metadata.operations;
+  }
+  // Backwards compat: synthesize single buy from existing data
+  return [{
+    type: 'buy',
+    qty: parseFloat(holding.quantity) || 0,
+    price: parseFloat(holding.purchase_price) || 0,
+    date: holding.purchase_date || new Date().toISOString().slice(0, 10)
+  }];
+}
+
+function computePosition(operations) {
+  let totalBuyQty = 0, totalBuyCost = 0, totalSellQty = 0;
+  for (const op of operations) {
+    const qty = parseFloat(op.qty) || 0;
+    const price = parseFloat(op.price) || 0;
+    if (op.type === 'buy') {
+      totalBuyQty += qty;
+      totalBuyCost += qty * price;
+    } else if (op.type === 'sell') {
+      totalSellQty += qty;
+    }
+  }
+  const netQty = totalBuyQty - totalSellQty;
+  const ppp = totalBuyQty > 0 ? totalBuyCost / totalBuyQty : 0;
+  return { ppp, netQty };
+}
+
+async function addOperationToHolding(holdingId, operation) {
+  const holding = _portfolioHoldings.find(h => h.id === holdingId);
+  if (!holding) return { error: 'Holding no encontrado' };
+
+  const ops = getOperationsFromHolding(holding);
+  if (operation.type === 'sell') {
+    const { netQty } = computePosition(ops);
+    if (operation.qty > netQty) return { error: `No podes vender más de ${netQty}` };
+  }
+  ops.push(operation);
+  const { ppp, netQty } = computePosition(ops);
+
+  const newMeta = { ...(holding.metadata || {}), operations: ops };
+  const { error } = await supabaseClient.from('holdings').update({
+    quantity: netQty,
+    purchase_price: ppp,
+    metadata: newMeta,
+  }).eq('id', holdingId);
+
+  if (error) return { error: error.message };
+  return { ok: true };
+}
+
 let _portfolioHoldings = [];
 let _portfolioPrices = {};
 let _portfolioLoading = false;
@@ -2726,16 +2780,19 @@ function renderPortfolioHoldings(config) {
     const pnlStr = v.pnl != null ? `${v.pnl >= 0 ? '+' : ''}${fmtMoney(v.pnl, v.currency)}` : '—';
     const qty = parseFloat(h.quantity);
     const qtyStr = h.asset_type === 'garantizado' ? `$${qty.toLocaleString('es-AR')}` : qty.toLocaleString('es-AR');
+    const ops = getOperationsFromHolding(h);
+    const opsCount = ops.length;
+    const opsBadge = opsCount > 1 ? `<span class="ops-badge">${opsCount} ops</span>` : '';
 
     return `<tr>
-      <td><strong>${h.ticker}</strong><br><span style="font-size:0.7rem;color:var(--text-tertiary)">${typeInfo.label || h.asset_type}</span></td>
+      <td><strong>${h.ticker}</strong>${opsBadge}<br><span style="font-size:0.7rem;color:var(--text-tertiary)">${typeInfo.label || h.asset_type}</span></td>
       <td>${qtyStr}</td>
       <td>${currSymbol}${parseFloat(h.purchase_price).toFixed(2)}</td>
       <td>${priceStr}</td>
       <td style="color:${pnlColor};font-weight:600">${pnlStr}</td>
       <td style="font-weight:700">${valueStr}</td>
       <td class="col-actions">
-        <button onclick="editHolding('${h.id}')" title="Editar">✏️</button>
+        <button onclick="openOperationsModal('${h.id}')" title="Operaciones">➕</button>
         <button onclick="deleteHolding('${h.id}')" title="Eliminar">🗑️</button>
       </td>
     </tr>`;
@@ -2744,7 +2801,7 @@ function renderPortfolioHoldings(config) {
   container.innerHTML = `
     <table class="portfolio-table">
       <thead><tr>
-        <th>Activo</th><th>Cantidad</th><th>P.Compra</th><th>P.Actual</th><th>P&L</th><th>Valor</th><th></th>
+        <th>Activo</th><th>Cantidad</th><th>PPP</th><th>P.Actual</th><th>P&L</th><th>Valor</th><th></th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
@@ -2927,11 +2984,15 @@ function openAddHoldingModal(editId) {
       errorEl.style.display = '';
       return;
     }
-    if (JSON.stringify(metadata).length > 1000) {
+    if (JSON.stringify(metadata).length > 5000) {
       errorEl.textContent = 'Metadata demasiado grande';
       errorEl.style.display = '';
       return;
     }
+
+    // Store initial buy operation in metadata for PPP tracking
+    const initialOp = { type: 'buy', qty, price: price || 1, date };
+    metadata.operations = [initialOp];
 
     const record = {
       user_id: currentUser.id,
@@ -2961,7 +3022,115 @@ function openAddHoldingModal(editId) {
 }
 
 function editHolding(id) {
-  openAddHoldingModal(id);
+  openOperationsModal(id);
+}
+
+function openOperationsModal(holdingId) {
+  const holding = _portfolioHoldings.find(h => h.id === holdingId);
+  if (!holding) return;
+
+  const ops = getOperationsFromHolding(holding);
+  const { ppp, netQty } = computePosition(ops);
+  const typeInfo = ASSET_TYPES[holding.asset_type] || {};
+  const curr = typeInfo.currency === 'USD' ? 'US$' : '$';
+  const isBond = ['soberano', 'on', 'cer', 'lecap'].includes(holding.asset_type);
+  const priceLabel = isBond ? 'por 100 VN' : 'por unidad';
+
+  const opsRows = ops.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(op => {
+    const isBuy = op.type === 'buy';
+    const typeClass = isBuy ? 'ops-buy' : 'ops-sell';
+    const typeText = isBuy ? 'Compra' : 'Venta';
+    return `<tr class="${typeClass}">
+      <td>${op.date || '—'}</td>
+      <td>${typeText}</td>
+      <td>${parseFloat(op.qty).toLocaleString('es-AR')}</td>
+      <td>${curr}${parseFloat(op.price).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+    </tr>`;
+  }).join('');
+
+  const overlay = document.createElement('div');
+  overlay.className = 'mundo-modal-overlay';
+  overlay.innerHTML = `
+    <div class="mundo-modal ops-modal">
+      <button class="mundo-modal-close" id="ops-close">&times;</button>
+      <h3 style="margin:0 0 12px;font-size:1.1rem;font-weight:700;color:var(--text)">${holding.ticker} <span style="font-weight:400;color:var(--text-secondary);font-size:0.85rem">${typeInfo.label || ''}</span></h3>
+
+      <div class="ops-summary">
+        <div class="ops-summary-item"><span class="ops-label">Posición</span><span class="ops-value">${netQty.toLocaleString('es-AR')} ${isBond ? 'VN' : typeInfo.qtyLabel || ''}</span></div>
+        <div class="ops-summary-item"><span class="ops-label">PPP</span><span class="ops-value">${curr}${ppp.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+        <div class="ops-summary-item"><span class="ops-label">Operaciones</span><span class="ops-value">${ops.length}</span></div>
+      </div>
+
+      ${ops.length > 0 ? `
+      <table class="ops-table">
+        <thead><tr><th>Fecha</th><th>Tipo</th><th>Cantidad</th><th>Precio</th></tr></thead>
+        <tbody>${opsRows}</tbody>
+      </table>` : ''}
+
+      <div class="ops-add-section">
+        <div style="font-size:0.85rem;font-weight:600;color:var(--text);margin-bottom:8px">Agregar operación</div>
+        <div class="ops-type-toggle">
+          <button class="ops-type-btn ops-type-buy active" data-type="buy">Compra</button>
+          <button class="ops-type-btn ops-type-sell" data-type="sell">Venta</button>
+        </div>
+        <div class="ops-form-row">
+          <div class="ops-field">
+            <label>Cantidad</label>
+            <input type="number" id="ops-qty" step="any" min="0" placeholder="${isBond ? 'VN' : 'Cant.'}">
+          </div>
+          <div class="ops-field">
+            <label>Precio <span style="color:var(--text-tertiary);font-size:0.75rem">${priceLabel}</span></label>
+            <input type="number" id="ops-price" step="any" min="0" placeholder="${curr}0.00">
+          </div>
+          <div class="ops-field">
+            <label>Fecha</label>
+            <input type="date" id="ops-date" value="${new Date().toISOString().slice(0, 10)}">
+          </div>
+        </div>
+        <div id="ops-error" style="color:var(--red);font-size:0.8rem;margin-top:4px;display:none"></div>
+        <button id="ops-save" class="portfolio-add-btn" style="width:100%;margin-top:10px;padding:10px">Agregar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('active'));
+
+  // Type toggle
+  let selectedOpType = 'buy';
+  overlay.querySelectorAll('.ops-type-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      overlay.querySelectorAll('.ops-type-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedOpType = btn.dataset.type;
+    });
+  });
+
+  // Save operation
+  overlay.querySelector('#ops-save').addEventListener('click', async () => {
+    const errorEl = overlay.querySelector('#ops-error');
+    errorEl.style.display = 'none';
+    const qty = parseFloat(overlay.querySelector('#ops-qty').value);
+    const price = parseFloat(overlay.querySelector('#ops-price').value);
+    const date = overlay.querySelector('#ops-date').value;
+
+    if (!qty || qty <= 0) { errorEl.textContent = 'Cantidad debe ser mayor a 0'; errorEl.style.display = ''; return; }
+    if (isNaN(price) || price < 0) { errorEl.textContent = 'Precio inválido'; errorEl.style.display = ''; return; }
+    if (!date) { errorEl.textContent = 'Fecha requerida'; errorEl.style.display = ''; return; }
+
+    const result = await addOperationToHolding(holdingId, { type: selectedOpType, qty, price, date });
+    if (result.error) {
+      errorEl.textContent = result.error;
+      errorEl.style.display = '';
+      return;
+    }
+    overlay.classList.remove('active');
+    setTimeout(() => overlay.remove(), 200);
+    loadPortfolio();
+  });
+
+  // Close
+  const close = () => { overlay.classList.remove('active'); setTimeout(() => overlay.remove(), 200); };
+  overlay.querySelector('#ops-close').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
 }
 
 async function deleteHolding(id) {
