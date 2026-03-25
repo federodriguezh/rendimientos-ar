@@ -55,6 +55,9 @@
         <a href="#" class="currency-tab" id="header-ons">
           <span class="flag">🏢</span> ONs
         </a>
+        <a href="#" class="currency-tab" id="header-portfolio">
+          <span class="flag">💼</span> Portfolio
+        </a>
       </nav>
       <button class="theme-toggle" id="theme-toggle" aria-label="Cambiar tema">🌙</button>
     </div>
@@ -182,11 +185,43 @@
       </section>
     </div>
 
+    <!-- Tab: Portfolio -->
+    <div id="tab-portfolio" style="display:none">
+      <section class="section" id="portfolio-section">
+        <div class="portfolio-add-form" id="portfolio-add-form">
+          <div class="portfolio-form-row">
+            <div class="portfolio-field">
+              <label for="pf-ticker">Ticker</label>
+              <input type="text" id="pf-ticker" placeholder="Ej: GGAL, AAPL" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="portfolio-field">
+              <label for="pf-quantity">Cantidad</label>
+              <input type="number" id="pf-quantity" placeholder="100" min="0" step="1">
+            </div>
+            <div class="portfolio-field">
+              <label for="pf-buy-price">Precio compra</label>
+              <input type="number" id="pf-buy-price" placeholder="6500" min="0" step="0.01">
+            </div>
+            <div class="portfolio-field">
+              <label for="pf-currency">Moneda</label>
+              <select id="pf-currency">
+                <option value="ARS">$ ARS</option>
+                <option value="USD">U$S USD</option>
+              </select>
+            </div>
+            <button class="portfolio-add-btn" id="portfolio-add-btn">Agregar</button>
+          </div>
+          <p class="portfolio-form-error" id="portfolio-form-error"></p>
+        </div>
+        <div id="portfolio-list"></div>
+      </section>
+    </div>
+
   </main>
 
   <footer class="footer">
     <p class="visit-counter" id="visit-counter"></p>
-    <p>FCIs: CAFCI via ArgentinaDatos. Plazos Fijos: BCRA via ArgentinaDatos. LECAPs/BONCAPs: data912. Soberanos: data912. ONs: data912.</p>
+    <p>FCIs: CAFCI via ArgentinaDatos. Plazos Fijos: BCRA via ArgentinaDatos. LECAPs/BONCAPs: data912. Soberanos: data912. ONs: data912. Stocks/CEDEARs: data912.</p>
     <p>Hecho con ❤️ desde Argentina 🇦🇷</p>
   </footer>
 

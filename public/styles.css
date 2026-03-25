@@ -489,6 +489,94 @@ body {
 [data-theme="dark"] .soberano-ley.ley-ny { background: #1e3a5f; color: #93bbfd; }
 .soberano-ytm { font-weight: 700; }
 
+/* Portfolio */
+.portfolio-add-form {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 20px;
+}
+.portfolio-form-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.portfolio-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 100px; }
+.portfolio-field label { font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
+.portfolio-field input,
+.portfolio-field select {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-family: var(--font);
+}
+.portfolio-field input:focus,
+.portfolio-field select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-light);
+}
+.portfolio-add-btn {
+  padding: 8px 20px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font);
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.portfolio-add-btn:hover { background: var(--accent-dark); }
+.portfolio-form-error { color: var(--red); font-size: 0.78rem; margin: 8px 0 0; min-height: 1.2em; }
+
+.portfolio-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; white-space: nowrap; table-layout: fixed; }
+.portfolio-table thead { background: var(--accent); color: #fff; }
+.portfolio-table th { padding: 10px 12px; font-weight: 600; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; text-align: right; }
+.portfolio-table th:first-child { text-align: left; }
+.portfolio-table td { padding: 9px 12px; border-bottom: 1px solid var(--border-light); text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+.portfolio-table td:first-child { text-align: left; }
+.portfolio-table tbody tr { background: var(--card-bg); }
+.portfolio-table tbody tr:hover { background: var(--bg-subtle); }
+.portfolio-table tbody tr:last-child td { border-bottom: none; }
+.pf-ticker-cell { font-weight: 700; color: var(--accent); }
+.pnl-positive { color: var(--green); }
+.pnl-negative { color: var(--red); }
+
+.portfolio-summary {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  font-size: 0.85rem;
+}
+.portfolio-summary-label { font-weight: 700; color: var(--text-secondary); text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.04em; }
+
+.portfolio-remove-btn {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s;
+  line-height: 1;
+}
+.portfolio-remove-btn:hover { color: var(--red); background: var(--red-bg); }
+
 .admin-link {
   font-size: 0.72rem;
   color: var(--text-tertiary);
@@ -1189,4 +1277,12 @@ body {
   .lecap-type-badge { font-size: 0.5rem; padding: 1px 4px; margin-left: 4px; }
   .scatter-plot { height: 280px; }
   .footer { padding: 24px 16px 40px; }
+  /* Portfolio mobile */
+  .portfolio-form-row { flex-direction: column; gap: 8px; }
+  .portfolio-field { width: 100%; }
+  .portfolio-add-btn { width: 100%; }
+  .portfolio-table { table-layout: auto; font-size: 0.6rem; white-space: nowrap; }
+  .portfolio-table th { padding: 6px 5px; font-size: 0.52rem; }
+  .portfolio-table td { padding: 5px 5px; }
+  .portfolio-summary { flex-direction: column; gap: 4px; }
 }

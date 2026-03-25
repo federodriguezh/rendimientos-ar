@@ -367,6 +367,7 @@ function setupTabs() {
   const headerSoberanos = document.getElementById('header-soberanos');
   const headerONs = document.getElementById('header-ons');
   const headerMundo = document.getElementById('header-mundo');
+  const headerPortfolio = document.getElementById('header-portfolio');
 
   function hideAllTabs() {
     document.getElementById('tab-billeteras').style.display = 'none';
@@ -375,8 +376,9 @@ function setupTabs() {
     document.getElementById('tab-cer').style.display = 'none';
     document.getElementById('tab-ons').style.display = 'none';
     document.getElementById('tab-soberanos').style.display = 'none';
+    document.getElementById('tab-portfolio').style.display = 'none';
     document.getElementById('section-mundo').style.display = 'none';
-    [headerArs, headerSoberanos, headerONs, headerMundo].forEach(b => b && b.classList.remove('active'));
+    [headerArs, headerSoberanos, headerONs, headerMundo, headerPortfolio].forEach(b => b && b.classList.remove('active'));
   }
 
   function updatePageTitle(section) {
@@ -386,7 +388,8 @@ function setupTabs() {
       ars: 'Billeteras y Fondos',
       bonos: 'Bonos Soberanos USD',
       plazofijo: 'Tasas Plazo Fijo',
-      lecaps: 'LECAPs y BONCAPs'
+      lecaps: 'LECAPs y BONCAPs',
+      portfolio: 'Portfolio'
     };
     document.title = titles[section] ? `${titles[section]} — ${base}` : base;
   }
@@ -467,10 +470,22 @@ function setupTabs() {
     }
   }
 
+  function switchToPortfolio() {
+    hideAllTabs();
+    headerPortfolio.classList.add('active');
+    subnav.style.display = 'none';
+    document.getElementById('tab-portfolio').style.display = 'block';
+    hero.querySelector('h1').textContent = 'Portfolio';
+    hero.querySelector('p').textContent = 'Seguí tus posiciones en acciones y CEDEARs con precios en tiempo real.';
+    updatePageTitle('portfolio');
+    loadPortfolio();
+  }
+
   if (headerArs) headerArs.addEventListener('click', (e) => { e.preventDefault(); switchToArs(); location.hash = 'ars'; });
   if (headerSoberanos) headerSoberanos.addEventListener('click', (e) => { e.preventDefault(); switchToSoberanos(); location.hash = 'bonos'; });
   if (headerONs) headerONs.addEventListener('click', (e) => { e.preventDefault(); switchToONs(); location.hash = 'ons'; });
   if (headerMundo) headerMundo.addEventListener('click', (e) => { e.preventDefault(); switchToMundo(); location.hash = 'mundo'; });
+  if (headerPortfolio) headerPortfolio.addEventListener('click', (e) => { e.preventDefault(); switchToPortfolio(); location.hash = 'portfolio'; });
 
   // Handle initial hash on page load
   const initialHash = location.hash.replace('#', '');
@@ -480,6 +495,7 @@ function setupTabs() {
   else if (initialHash === 'lecaps') { switchToArs(); document.querySelector('.subnav-tab[data-tab="lecaps"]')?.click(); }
   else if (initialHash === 'cer') { switchToArs(); document.querySelector('.subnav-tab[data-tab="cer"]')?.click(); }
   else if (initialHash === 'ons') switchToONs();
+  else if (initialHash === 'portfolio') switchToPortfolio();
 
   // Handle back/forward navigation (skip if subnav tab already active)
   let _hashChanging = false;
@@ -493,6 +509,7 @@ function setupTabs() {
     else if (h === 'lecaps') { switchToArs(); document.querySelector('.subnav-tab[data-tab="lecaps"]')?.click(); }
     else if (h === 'cer') { switchToArs(); document.querySelector('.subnav-tab[data-tab="cer"]')?.click(); }
     else if (h === 'ons') switchToONs();
+    else if (h === 'portfolio') switchToPortfolio();
     else switchToMundo();
     _hashChanging = false;
   });
@@ -2159,4 +2176,193 @@ function openLecapCalculator(item) {
   }
   document.getElementById('lecap-calc-price').addEventListener('input', recalcLecap);
   document.getElementById('lecap-calc-monto').addEventListener('input', renderLecapResumen);
+}
+
+// ─── Portfolio ───
+
+function getPortfolio() {
+  try {
+    return JSON.parse(localStorage.getItem('portfolio') || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function savePortfolio(positions) {
+  localStorage.setItem('portfolio', JSON.stringify(positions));
+}
+
+function loadPortfolio() {
+  const container = document.getElementById('portfolio-list');
+  const positions = getPortfolio();
+
+  if (positions.length === 0) {
+    container.innerHTML = '<p style="text-align:center;color:var(--text-secondary);padding:40px 0">No hay posiciones. Agregá un ticker para comenzar.</p>';
+    setupPortfolioForm();
+    return;
+  }
+
+  container.innerHTML = '<div class="loading"><div class="loading-spinner"></div><p>Cargando precios...</p></div>';
+
+  const tickers = positions.map(p => p.ticker.toUpperCase()).join(',');
+  fetch('/api/portfolio-prices?symbols=' + encodeURIComponent(tickers))
+    .then(r => r.json())
+    .then(data => {
+      const priceLookup = {};
+      for (const item of (data.data || [])) {
+        priceLookup[item.symbol.toUpperCase()] = item;
+      }
+      renderPortfolioTable(container, positions, priceLookup);
+      setupPortfolioForm();
+    })
+    .catch(err => {
+      console.error('Portfolio load error:', err.message);
+      container.innerHTML = '<p style="text-align:center;color:var(--red);padding:40px 0">Error al cargar precios.</p>';
+    });
+}
+
+function renderPortfolioTable(container, positions, priceLookup) {
+  const rows = [];
+  let totalsARS = { invested: 0, current: 0 };
+  let totalsUSD = { invested: 0, current: 0 };
+
+  for (const pos of positions) {
+    const key = pos.ticker.toUpperCase();
+    const priceData = priceLookup[key];
+    const currentPrice = priceData ? (parseFloat(priceData.c) || 0) : 0;
+    const pctChange = priceData ? (priceData.pct_change || 0) : 0;
+    const investedValue = pos.buyPrice * pos.quantity;
+    const currentValue = currentPrice * pos.quantity;
+    const pnl = currentValue - investedValue;
+    const pnlPct = investedValue > 0 ? (pnl / investedValue) * 100 : 0;
+
+    const sym = pos.currency === 'USD' ? 'U$S' : '$';
+    const pnlClass = pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+
+    if (pos.currency === 'USD') {
+      totalsUSD.invested += investedValue;
+      totalsUSD.current += currentValue;
+    } else {
+      totalsARS.invested += investedValue;
+      totalsARS.current += currentValue;
+    }
+
+    rows.push(`
+      <tr>
+        <td class="pf-ticker-cell"><strong>${escapeHtml(pos.ticker.toUpperCase())}</strong></td>
+        <td>${pos.quantity.toLocaleString('es-AR')}</td>
+        <td>${sym} ${pos.buyPrice.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        <td>${currentPrice > 0 ? sym + ' ' + currentPrice.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</td>
+        <td class="${pctChange >= 0 ? 'pnl-positive' : 'pnl-negative'}">${pctChange !== 0 ? pctChange.toFixed(2) + '%' : '—'}</td>
+        <td>${sym} ${investedValue.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        <td>${currentPrice > 0 ? sym + ' ' + currentValue.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</td>
+        <td class="${pnlClass}">${currentPrice > 0 ? (pnl >= 0 ? '+' : '') + sym + ' ' + pnl.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</td>
+        <td class="${pnlClass}">${currentPrice > 0 ? (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(2) + '%' : '—'}</td>
+        <td><button class="portfolio-remove-btn" data-id="${pos.id}" title="Eliminar">&times;</button></td>
+      </tr>
+    `);
+  }
+
+  const totalPnlARS = totalsARS.current - totalsARS.invested;
+  const totalPnlPctARS = totalsARS.invested > 0 ? (totalPnlARS / totalsARS.invested) * 100 : 0;
+  const totalPnlUSD = totalsUSD.current - totalsUSD.invested;
+  const totalPnlPctUSD = totalsUSD.invested > 0 ? (totalPnlUSD / totalsUSD.invested) * 100 : 0;
+
+  let summaryHTML = '';
+  if (totalsARS.invested > 0) {
+    const cls = totalPnlARS >= 0 ? 'pnl-positive' : 'pnl-negative';
+    summaryHTML += `
+      <div class="portfolio-summary">
+        <span class="portfolio-summary-label">Total ARS:</span>
+        <span>Invertido: <strong>$ ${totalsARS.invested.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+        <span>Valor actual: <strong>$ ${totalsARS.current.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+        <span class="${cls}">P&L: <strong>${totalPnlARS >= 0 ? '+' : ''}$ ${totalPnlARS.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${totalPnlPctARS >= 0 ? '+' : ''}${totalPnlPctARS.toFixed(2)}%)</strong></span>
+      </div>`;
+  }
+  if (totalsUSD.invested > 0) {
+    const cls = totalPnlUSD >= 0 ? 'pnl-positive' : 'pnl-negative';
+    summaryHTML += `
+      <div class="portfolio-summary">
+        <span class="portfolio-summary-label">Total USD:</span>
+        <span>Invertido: <strong>U$S ${totalsUSD.invested.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+        <span>Valor actual: <strong>U$S ${totalsUSD.current.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+        <span class="${cls}">P&L: <strong>${totalPnlUSD >= 0 ? '+' : ''}U$S ${totalPnlUSD.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${totalPnlPctUSD >= 0 ? '+' : ''}${totalPnlPctUSD.toFixed(2)}%)</strong></span>
+      </div>`;
+  }
+
+  container.innerHTML = `
+    ${summaryHTML}
+    <div class="soberanos-table-wrap">
+      <table class="portfolio-table">
+        <thead>
+          <tr>
+            <th>Ticker</th>
+            <th>Cantidad</th>
+            <th>Precio compra</th>
+            <th>Precio actual</th>
+            <th>% Hoy</th>
+            <th>Invertido</th>
+            <th>Valor actual</th>
+            <th>P&L ($)</th>
+            <th>P&L (%)</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>${rows.join('')}</tbody>
+      </table>
+    </div>`;
+
+  container.querySelectorAll('.portfolio-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => removePosition(btn.dataset.id));
+  });
+}
+
+function setupPortfolioForm() {
+  const btn = document.getElementById('portfolio-add-btn');
+  const errorEl = document.getElementById('portfolio-form-error');
+  if (!btn) return;
+
+  // Remove old listeners by cloning
+  const newBtn = btn.cloneNode(true);
+  btn.parentNode.replaceChild(newBtn, btn);
+
+  newBtn.addEventListener('click', () => {
+    errorEl.textContent = '';
+    const ticker = document.getElementById('pf-ticker').value.trim();
+    const quantity = parseFloat(document.getElementById('pf-quantity').value);
+    const buyPrice = parseFloat(document.getElementById('pf-buy-price').value);
+    const currency = document.getElementById('pf-currency').value;
+
+    if (!ticker) { errorEl.textContent = 'Ingresá un ticker.'; return; }
+    if (!quantity || quantity <= 0) { errorEl.textContent = 'Ingresá una cantidad válida.'; return; }
+    if (!buyPrice || buyPrice <= 0) { errorEl.textContent = 'Ingresá un precio de compra válido.'; return; }
+
+    const positions = getPortfolio();
+    positions.push({
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      ticker: ticker.toUpperCase(),
+      quantity,
+      buyPrice,
+      currency,
+    });
+    savePortfolio(positions);
+
+    document.getElementById('pf-ticker').value = '';
+    document.getElementById('pf-quantity').value = '';
+    document.getElementById('pf-buy-price').value = '';
+
+    loadPortfolio();
+  });
+}
+
+function removePosition(id) {
+  const positions = getPortfolio().filter(p => p.id !== id);
+  savePortfolio(positions);
+  loadPortfolio();
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
 }

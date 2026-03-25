@@ -241,6 +241,34 @@ app.get('/api/cer-ultimo', async (req, res) => {
   }
 });
 
+// --- Portfolio: Stock + CEDEAR Prices (data912 proxy) ---
+
+app.get('/api/portfolio-prices', async (req, res) => {
+  try {
+    const [stocks, cedears] = await Promise.all([
+      fetch('https://data912.com/live/arg_stocks').then(r => r.json()),
+      fetch('https://data912.com/live/arg_cedears').then(r => r.json()),
+    ]);
+
+    const all = [
+      ...(Array.isArray(stocks) ? stocks : []),
+      ...(Array.isArray(cedears) ? cedears : [])
+    ];
+
+    // Optional filter by symbols query param
+    let data = all;
+    if (req.query.symbols) {
+      const requested = new Set(req.query.symbols.split(',').map(s => s.trim().toUpperCase()));
+      data = all.filter(item => requested.has(item.symbol));
+    }
+
+    res.json({ data, timestamp: new Date().toISOString() });
+  } catch (err) {
+    console.error('Portfolio proxy error:', err.message);
+    res.status(502).json({ error: 'Failed to fetch stock/CEDEAR data' });
+  }
+});
+
 // --- CER Bond Prices (via data912) ---
 
 app.get('/api/cer-precios', async (req, res) => {

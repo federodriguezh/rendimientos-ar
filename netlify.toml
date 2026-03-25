@@ -58,6 +58,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/portfolio-prices"
+  to = "/.netlify/functions/portfolio"
+  status = 200
+
+[[redirects]]
   from = "/api/config"
   to = "/config.json"
   status = 200
